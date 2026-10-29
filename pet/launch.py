@@ -1,10 +1,24 @@
-# 用 pythonw 把桌宠作为独立进程启动，然后立刻退出（mod 那边就不会被卡住）
-# 用法：python launch.py <pet.pyw 路径> <运行目录>
+# 把桌宠作为独立进程启动，然后立刻退出（mod 那边就不会被卡住）
+# 用法：python launch.py <pet 脚本路径> <运行目录>
 import os
 import subprocess
 import sys
 
 pet_script, run_dir = sys.argv[1], sys.argv[2]
+
+if sys.platform == 'darwin':
+    # macOS：start_new_session 让桌宠脱离 Claude 的进程组，会话结束后不被一起关掉
+    os.makedirs(run_dir, exist_ok=True)
+    with open(os.path.join(run_dir, 'launch.log'), 'w', encoding='utf-8') as log:
+        try:
+            proc = subprocess.Popen([sys.executable, pet_script, run_dir],
+                                    start_new_session=True, close_fds=True,
+                                    stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log.write(f'启动成功 pid={proc.pid} python={sys.executable}\n')
+        except OSError as err:
+            log.write(f'失败：{err}\n')
+    sys.exit(0)
 pythonw = os.path.join(os.path.dirname(sys.executable), 'pythonw.exe')
 if not os.path.exists(pythonw):
     pythonw = sys.executable

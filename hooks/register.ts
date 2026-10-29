@@ -63,12 +63,22 @@ async function pet($: EngineInterface, state: PetState, text: string, sound?: 'd
 
 async function launchPet($: EngineInterface) {
   try {
-    // 引擎不按 PATH 找程序，交给 Windows 自带的 cmd.exe 去找 python
-    // （cmd.exe 的路径必须用反斜杠，用正斜杠时 cmd 会把 /Windows 当成开关）
-    const ran = await $.process.run(
-      ['C:\\Windows\\System32\\cmd.exe','/d', '/c', 'python', `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet.pyw`, runDir],
-      { timeoutMs: 15000 },
-    )
+    let ran: { exitCode: number; stdout: string; stderr: string }
+    if (await $.env.get('SystemRoot')) {
+      // Windows：引擎不按 PATH 找程序，交给 cmd.exe 去找 python
+      // （cmd.exe 的路径必须用反斜杠，用正斜杠时 cmd 会把 /Windows 当成开关）
+      ran = await $.process.run(
+        ['C:\\Windows\\System32\\cmd.exe','/d', '/c', 'python', `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet.pyw`, runDir],
+        { timeoutMs: 15000 },
+      )
+    } else {
+      // macOS：桌宠跑在 ~/.claude/desk-pet/venv 里的 python（带 pyobjc/Pillow）
+      const home = ((await $.env.get('HOME')) ?? '').replace(/\\/g, '/')
+      ran = await $.process.run(
+        [`${home}/.claude/desk-pet/venv/bin/python`, `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet_mac.py`, runDir],
+        { timeoutMs: 15000 },
+      )
+    }
     if (ran.exitCode !== 0) {
       await $.fs.write(`${runDir}/mod-launch.log`, `exit=${ran.exitCode}\n${ran.stdout}\n${ran.stderr}`)
     }

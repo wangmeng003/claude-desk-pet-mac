@@ -174,7 +174,7 @@ class PetView(NSView):
         since = t - pet.hop_at
         hop = -14 * math.sin(since / 0.28 * math.pi) if since < 0.28 else 0
         img = pet.images[st]
-        iw = pet.char_h * pet.aspect
+        iw = pet.char_h * pet.aspects.get(st, 0.73)
         rect = NSMakeRect((W - iw) / 2, 4 - (bob + hop) * s, iw, pet.char_h)
         img.drawInRect_fromRect_operation_fraction_(rect, NSMakeRect(0, 0, 0, 0),
                                                     NSCompositingOperationSourceOver, 1.0)
@@ -271,7 +271,7 @@ class Pet:
         from PIL import Image
         h = SIZES.get(self.settings.get('size', '中'), 190)
         self.char_h = h
-        self.images, self.aspect = {}, 1.0
+        self.images, self.aspects = {}, {}
         for state, name in SPRITES.items():
             path = os.path.join(HERE, 'sprites', name + '.png')
             img = NSImage.alloc().initWithContentsOfFile_(path)
@@ -279,10 +279,10 @@ class Pet:
                 continue
             self.images[state] = img
             with Image.open(path) as im:
-                self.aspect = max(self.aspect, im.width / im.height)
+                self.aspects[state] = im.width / im.height  # 每张保持自己的宽高比
 
     def make_window(self):
-        self.W = max(round(self.char_h * self.aspect), round(190))
+        self.W = max(round(self.char_h * max(self.aspects.values(), default=0.73)), round(190))
         self.bubble_h = round(52)
         self.H = self.bubble_h + round(8) + self.char_h + round(6)
         self.view = PetView.alloc().initWithFrame_(NSMakeRect(0, 0, self.W, self.H))
@@ -313,8 +313,7 @@ class Pet:
         f = self.win.frame()
         cx, cy = f.origin.x + f.size.width / 2, f.origin.y
         self.load_sprites()
-        old_H = self.H
-        self.W = max(round(self.char_h * self.aspect), round(190))
+        self.W = max(round(self.char_h * max(self.aspects.values(), default=0.73)), round(190))
         self.H = self.bubble_h + round(8) + self.char_h + round(6)
         self.view.setFrameSize_((self.W, self.H))
         self.win.setFrame_(NSMakeRect(cx - self.W / 2, cy, self.W, self.H))

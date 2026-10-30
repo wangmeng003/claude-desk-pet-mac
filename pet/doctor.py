@@ -153,10 +153,10 @@ def check_lock(run_dir, port):
 def tail(path):
     try:
         with open(path, encoding='utf-8', errors='replace') as f:
-            lines = [l.rstrip() for l in f if l.strip()]
+            lines = [row.rstrip() for row in f if row.strip()]
     except OSError:
         return []
-    return [redact(l)[:TAIL_CHARS] for l in lines[-TAIL_LINES:]]
+    return [redact(row)[:TAIL_CHARS] for row in lines[-TAIL_LINES:]]
 
 
 def check_logs(run_dir):

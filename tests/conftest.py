@@ -4,6 +4,7 @@ pet_mac.py / pet.pyw 里现在还住着渲染器（Step 1/2 才抽 core/platform
 本文件负责按平台加载被测模块、准备临时运行目录，让测试只触碰纯逻辑：
 read_latest / poll 的状态映射 / effective_state / display_text / SPRITES 约定。
 """
+import importlib
 import importlib.util
 import json
 import os
@@ -16,6 +17,12 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 PET_DIR = REPO / 'pet'
+
+# pet_mac.py / pet.pyw 以 `from core...` 绝对导入（运行时 pet/ 在 sys.path[0]），
+# 测试经 SourceFileLoader 加载，需要手动补上
+if str(PET_DIR) not in sys.path:
+    sys.path.insert(0, str(PET_DIR))
+importlib.invalidate_caches()
 
 
 def _load_module(name: str, path: Path):

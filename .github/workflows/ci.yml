@@ -27,14 +27,18 @@ jobs:
         run: pip install pyobjc-framework-Cocoa
       - name: ruff
         run: ruff check pet/ tests/
+      - name: core 边界检查（只允许 stdlib + core 内部依赖）
+        shell: bash
+        run: |
+          if grep -rEn "^[[:space:]]*(import|from)[[:space:]]+(AppKit|Foundation|Quartz|CoreFoundation|tkinter|winsound|PIL|requests|urllib)" pet/core/; then
+            echo "::error pet/core 只能依赖 stdlib + core 内部模块（见 ARCHITECTURE.md §3.3）"
+            exit 1
+          fi
       - name: mypy（增量，先绿后严）
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            mypy pet/pet_mac.py pet/launch.py pet/setup.py
-          else
-            mypy pet/pet.pyw pet/launch.py pet/setup.py
-          fi
+          if [ "$RUNNER_OS" = "macOS" ]; then target=pet_mac.py; else target=pet.pyw; fi
+          cd pet && mypy "$target" launch.py setup.py core/
       - name: pytest（= 平台冒烟：导入被测模块即覆盖平台依赖）
         run: python -m pytest -v
 

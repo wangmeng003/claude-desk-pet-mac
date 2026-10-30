@@ -3,8 +3,6 @@
 # 无边框 + 透明底，气泡和立绘都画在一个自绘 NSView 上。
 # 状态文件、设置文件和 Windows 版 pet.pyw 保持同一套约定。
 # 用法：python pet_mac.py <运行目录>
-import glob
-import json
 import math
 import os
 import socket
@@ -19,6 +17,11 @@ from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory, NSBez
                     NSWindow, NSWindowCollectionBehaviorCanJoinAllSpaces,
                     NSWindowCollectionBehaviorFullScreenAuxiliary, NSView, NSWorkspace)
 from Foundation import NSMakePoint, NSMakeRect, NSAttributedString, NSTimer
+
+from core import sessions as core_sessions
+from core import state_reader as core_state_reader
+from core import view_model as core_view_model
+from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (本文件的渲染代码与测试直接用)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUNDS = os.path.join(os.path.dirname(HERE), 'sounds')
@@ -40,20 +43,6 @@ def acquire_lock():
     except OSError:
         sys.exit(0)
 
-# 状态 → 立绘（与 Windows 版一致）
-SPRITES = {
-    'thinking': 'smile-closed',
-    'tool': 'typing',
-    'reading': 'notes',
-    'waiting': 'knock',
-    'celebrate': 'confetti',
-    'idle': 'smile',
-    'error': 'panic',
-    'aborted': 'guilty',
-    'stone': 'stone',
-}
-SIZES = {'小': 140, '中': 190, '大': 250}  # 角色高度（屏幕点数）
-IDLE_AFTER = 10 * 60  # 等你回复超过 10 分钟就开始发呆
 TEXT = NSColor.colorWithCalibratedRed_green_blue_alpha_(0x3a / 255, 0x2a / 255, 0x1a / 255, 1)
 CREAM = NSColor.colorWithCalibratedRed_green_blue_alpha_(0xff / 255, 0xfa / 255, 0xf3 / 255, 1)
 ORANGE = NSColor.colorWithCalibratedRed_green_blue_alpha_(0xe8 / 255, 0x74 / 255, 0x3b / 255, 1)
@@ -104,38 +93,16 @@ def claude_app_pids():
 
 
 def load_settings():
-    try:
-        with open(SETTINGS, encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return core_state_reader.load_settings(SETTINGS)
 
 
 def save_settings(s):
-    try:
-        os.makedirs(RUN_DIR, exist_ok=True)
-        with open(SETTINGS, 'w', encoding='utf-8') as f:
-            json.dump(s, f, ensure_ascii=False)
-    except Exception:
-        pass
+    core_state_reader.save_settings(SETTINGS, s)
 
 
 def read_latest():
-    """读所有会话里最新的状态；顺手清掉两天前的旧文件。"""
-    best, now = None, time.time()
-    for p in glob.glob(os.path.join(SESSIONS, '*.json')):
-        try:
-            mtime = os.path.getmtime(p)
-            if now - mtime > 2 * 86400:
-                os.remove(p)
-                continue
-            with open(p, encoding='utf-8') as f:
-                data = json.load(f)
-            if best is None or mtime > best[0]:
-                best = (mtime, data)
-        except Exception:
-            continue
-    return best
+    """读所有会话里最新的状态；顺手清掉过期文件。"""
+    return core_sessions.read_latest(SESSIONS)
 
 
 class PetView(NSView):
@@ -380,32 +347,23 @@ class Pet:
 
     # ---------- 状态 ----------
     def display_text(self):
-        if self.effective_state() == 'idle':
-            return '在发呆～ zZ'
-        if self.state == 'thinking' and self.text.endswith('中'):
-            return self.text + '.' * (int(time.time() * 2.5) % 3 + 1)
-        return self.text
+        return core_view_model.display_text_with_dots(
+            self.state, self.text, time.time(), self.state_since)
 
     def effective_state(self):
-        if self.state == 'waiting' and time.time() - self.state_since > IDLE_AFTER:
-            return 'idle'
-        return self.state
+        return core_view_model.effective_state(self.state, self.state_since, time.time())
 
     def poll(self):
         latest = read_latest()
         if latest and latest[0] != self.last_mtime:
             self.last_mtime_seen, self.last_mtime = self.last_mtime, latest[0]
-            data = latest[1]
-            state = data.get('state', 'waiting')
-            if state not in SPRITES:
-                state = 'waiting'
-            changed = state != self.state
-            self.state, self.text = state, data.get('text', '')
-            self.project = data.get('project', '')
+            mapped = core_view_model.normalize(latest[1])
+            changed = mapped.state != self.state
+            self.state, self.text = mapped.state, mapped.text
+            self.project = mapped.project
             self.state_since = time.time()
-            sound = data.get('sound')
-            if sound in ('done', 'error') and self.settings.get('sound', True) and self.last_mtime_seen:
-                play_sound(os.path.join(SOUNDS, sound + '.wav'))
+            if mapped.sound and self.settings.get('sound', True) and self.last_mtime_seen:
+                play_sound(os.path.join(SOUNDS, mapped.sound + '.wav'))
             if changed:
                 self.hop_at = time.time()
         self.refresh()

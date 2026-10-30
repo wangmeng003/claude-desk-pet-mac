@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "desk-pet 会话状态文件 v1（specs/state.md §2）",
+  "description": "插件（写入方）↔ 桌宠（读取方）的状态协议。TS/Python 的枚举必须通过契约测试与本文件对齐。",
+  "type": "object",
+  "required": ["v", "session", "state", "text", "project", "ts"],
+  "properties": {
+    "v": { "const": 1, "description": "协议版本" },
+    "session": { "type": "string", "description": "会话 id；旧格式缺失时读取方用文件名补" },
+    "agent": { "type": "string", "default": "claude-code" },
+    "state": {
+      "enum": ["idle", "thinking", "tool", "reading", "waiting", "attention", "celebrate", "error"]
+    },
+    "text": { "type": "string", "maxLength": 60, "description": "气泡文案；不含 prompt/完整命令" },
+    "project": { "type": "string", "description": "项目 basename；隐私模式可空" },
+    "ts": { "type": "number", "description": "Unix 秒；写入方时钟" },
+    "sound": { "enum": ["done", "error", "null"] },
+    "attention": { "type": "boolean", "description": "是否需要用户操作；写入方显式设置" }
+  },
+  "additionalProperties": false
+}

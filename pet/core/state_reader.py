@@ -1,9 +1,7 @@
-# core：状态文件的读取、解析、校验、TTL。只允许依赖 models + stdlib + fs。
+# core：状态文件的读取、解析、校验、TTL。只允许依赖 stdlib + fs。
 import json
 import os
 import time
-
-from . import models
 
 EXPIRE_AFTER = 2 * 86400  # 状态文件保留两天，scan 时顺手清掉更旧的
 
@@ -76,8 +74,3 @@ def number(value, default):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return default
     return value
-
-
-def known_state(state) -> bool:
-    """state 是否是已知状态；非字符串直接否（dict 的 in 会对 list 抛 TypeError）。"""
-    return isinstance(state, str) and state in models.SPRITES

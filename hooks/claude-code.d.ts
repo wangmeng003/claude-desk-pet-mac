@@ -55,7 +55,8 @@ declare module 'claude-code' {
   // 引擎传入的 registrar 本身就是可调用对象：on(event, handler) 直接注册
   export interface OnFunction {
     (
-      event: 'session.start' | 'turn.start' | 'tool.call' | 'turn.complete',
+      event: 'session.start' | 'session.end' | 'turn.start' | 'tool.call' | 'turn.complete'
+        | 'notification',
       handler: Handler,
     ): HookRegistration
     (event: 'command.run', filter: { command: string }, handler: Handler): void

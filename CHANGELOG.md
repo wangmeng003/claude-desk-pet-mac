@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- M1 #10：状态协议 v1 落地（specs/state.md）——8 事件映射 + schema 对齐 + 契约测试：
+  - hooks 写入方按协议 §4.1 全量映射：`session.start`→waiting(false)、`turn.start`→thinking、
+    `tool.call`→tool/reading、工具失败→error(true)、`turn.complete`→waiting(true)/celebrate(false)/error，
+    **新增 `notification`→attention(true)「需要你看一下」与 `session.end`→idle(false)「晚安～」**（引擎事件
+    清单见 ADR 0001）；aborted 不再是协议状态，写入时直接映射 error
+  - 状态文件升级 schema v1：补 `v`/`session`/`agent`/`attention` 字段（可选键给了才写），
+    `sound`/`attention` 由写入方显式设置
+  - pet 读取方：normalize 新增 attention/idle 识别；未知/缺失 state 回退从 waiting 改为 **idle**（协议 §1.3）；
+    旧格式 `aborted` 读取时映射 error；v1 新字段容忍忽略
+  - 石化彩蛋迁移：hooks 不再写 `stone`，连续 3 次 error 由渲染层（mac/Windows 双端 poll）自己触发
+  - `contracts/state.schema.json` 建立，TS `STATES` 与 Python `PROTOCOL_STATES` 各有契约测试对齐同一份 schema
+  - `attention` 立绘复用 knock（端到端验证：状态文件→--shot 截图显示敲门立绘+「需要你看一下」）
 - 全面代码审查，修掉 14 个真 bug（每个都补了回归测试）：
   - **坏数据不再搞崩桌宠**：状态文件里的 `text`/`project` 不是字符串、`state` 是 list（不可哈希）时，
     以前会一路流到渲染层抛异常（Windows 上 `draw_bubble` 抛错还会让 poll 轮询彻底停摆，桌宠永远冻住）。

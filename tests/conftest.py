@@ -84,6 +84,7 @@ def make_pet():
     pet.last_mtime = 0
     pet.last_mtime_seen = 0
     pet.hop_at = time.time()
+    pet.error_streak = 0
     pet.settings = {'sound': True}
     pet.refresh = lambda: None  # 实例属性盖掉方法，渲染不执行
     if pet_win is not None and petmod is pet_win:

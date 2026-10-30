@@ -69,6 +69,7 @@ class Pet:
         self.last_mtime_seen = 0
         self.hop_at = time.time()
         self.hidden = False
+        self.error_streak = 0  # 连续 error 计数（石化彩蛋）
         self.last_alive = time.time()
         self.focus_watch = focus.ForegroundWatch()
 
@@ -140,6 +141,13 @@ class Pet:
             self.state, self.text = mapped.state, mapped.text
             self.project = mapped.project
             self.state_since = time.time()
+            # 石化彩蛋（协议 §3）：连续 3 次 error 由渲染层自己触发
+            if mapped.state == 'error':
+                self.error_streak += 1
+                if self.error_streak >= 3:
+                    self.state, self.text = 'stone', '石化了…'
+            else:
+                self.error_streak = 0
             if mapped.sound and self.settings.get('sound', True) and self.last_mtime_seen:
                 play_sound(os.path.join(SOUNDS, mapped.sound + '.wav'))
             if changed:

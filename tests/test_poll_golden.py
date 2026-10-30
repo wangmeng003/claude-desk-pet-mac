@@ -15,21 +15,35 @@ class TestPollMapping:
         pet.poll()
         assert (pet.state, pet.text, pet.project) == ('tool', '在跑命令…', 'demo')
 
-    def test_unknown_state_falls_back_to_waiting(self, pet_state):
+    def test_unknown_state_falls_back_to_idle(self, pet_state):
         petmod, _tmp, sessions = pet_state
         write_session(sessions, 's1', {'state': 'hacked', 'text': 'x'}, age=10)
         pet = make_pet()
         pet.poll()
-        assert pet.state == 'waiting'
+        assert pet.state == 'idle'
         assert pet.text == 'x'  # 文本照常透传
 
-    def test_missing_state_defaults_waiting_empty_text(self, pet_state):
+    def test_missing_state_defaults_idle(self, pet_state):
         petmod, _tmp, sessions = pet_state
         write_session(sessions, 's1', {'text': '只有文本'}, age=10)
         pet = make_pet()
         pet.poll()
-        assert pet.state == 'waiting'
+        assert pet.state == 'idle'
         assert pet.text == '只有文本'
+
+    def test_attention_state_applies(self, pet_state):
+        petmod, _tmp, sessions = pet_state
+        write_session(sessions, 's1', {'state': 'attention', 'text': '需要你看一下'}, age=10)
+        pet = make_pet()
+        pet.poll()
+        assert pet.state == 'attention'
+
+    def test_aborted_reads_as_error(self, pet_state):
+        petmod, _tmp, sessions = pet_state
+        write_session(sessions, 's1', {'state': 'aborted', 'text': '被打断了…'}, age=10)
+        pet = make_pet()
+        pet.poll()
+        assert (pet.state, pet.text) == ('error', '被打断了…')
 
     def test_untouched_mtime_keeps_state(self, pet_state):
         petmod, _tmp, sessions = pet_state
@@ -41,6 +55,29 @@ class TestPollMapping:
         pet.poll()  # 同一文件再 poll 一次
         assert pet.state == 'tool'
         assert pet.state_since == since  # 状态时间戳不被重置（发呆计时不受影响）
+
+    def test_three_consecutive_errors_trigger_stone(self, pet_state):
+        """石化彩蛋（协议 §3）：连续 3 次 error 由渲染层触发，写入方只写 error。"""
+        petmod, _tmp, sessions = pet_state
+        pet = make_pet()
+        for i in range(3):
+            write_session(sessions, 's1', {'state': 'error', 'text': '出错了…'}, age=30 - i)
+            pet.poll()
+            time.sleep(0.01)
+        assert (pet.state, pet.text) == ('stone', '石化了…')
+
+    def test_stone_resets_on_non_error(self, pet_state):
+        petmod, _tmp, sessions = pet_state
+        pet = make_pet()
+        for i in range(3):
+            write_session(sessions, 's1', {'state': 'error', 'text': '出错了…'}, age=30 - i)
+            pet.poll()
+            time.sleep(0.01)
+        assert pet.state == 'stone'
+        write_session(sessions, 's1', {'state': 'thinking', 'text': '思考中'}, age=1)
+        pet.poll()
+        assert pet.state == 'thinking'
+        assert pet.error_streak == 0
 
 
 @requires_platform

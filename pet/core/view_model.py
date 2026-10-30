@@ -1,5 +1,5 @@
 # core：主会话 → 气泡/动画状态。纯函数，只允许依赖 models + stdlib。
-from . import models, state_reader
+from . import models
 
 
 def _text(value) -> str:
@@ -12,10 +12,17 @@ def _text(value) -> str:
 
 
 def normalize(data: dict) -> models.SessionState:
-    """原始状态文件 → 视图无关 DTO（默认值与非法值回退和旧实现一致）。"""
-    state = data.get('state', 'waiting')
-    if not state_reader.known_state(state):
-        state = 'waiting'
+    """原始状态文件 → 视图无关 DTO（状态协议 v1 §1.3/§3）。
+
+    - 'aborted' 是旧格式，映射到 error（文案保留）；
+    - 未知/缺失/非字符串 state 回退 idle（协议：坏数据按「没有活跃工作」处理）；
+    - v1 新增字段（v/session/agent/attention）读取方忽略。
+    """
+    state = data.get('state')
+    if state == 'aborted':
+        state = 'error'
+    elif not (isinstance(state, str) and state in models.PROTOCOL_STATES):
+        state = 'idle'
     sound = data.get('sound')
     if sound not in models.SOUNDS:
         sound = None

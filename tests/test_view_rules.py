@@ -12,11 +12,11 @@ EXPECTED_SPRITES = {
     'tool': 'typing',
     'reading': 'notes',
     'waiting': 'knock',
+    'attention': 'knock',
     'celebrate': 'confetti',
     'idle': 'smile',
     'error': 'panic',
-    'aborted': 'guilty',
-    'stone': 'stone',
+    'stone': 'stone',   # 渲染层彩蛋，不是协议状态
 }
 EXPECTED_SIZES = {'小': 140, '中': 190, '大': 250}
 

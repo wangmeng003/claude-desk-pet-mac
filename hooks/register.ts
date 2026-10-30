@@ -1,5 +1,9 @@
 // register：只注册事件/命令并创建 SessionContext，逻辑都在各职责模块里。
-// 行为与拆分前的单文件 register.ts 一致（M1 Step 3，见 ARCHITECTURE §6）。
+// 事件 → 状态映射按状态协议 v1 §4.1（specs/state.md）：
+// SessionStart→waiting(false)、UserPromptSubmit/turn.start→thinking、
+// PreToolUse/tool.call→tool|reading、PostToolUseFailure→error(true)、
+// Stop/turn.complete→waiting(true)|celebrate(false)、Notification→attention(true)、
+// SessionEnd→idle(false)。
 import type { Register } from 'claude-code'
 import { initContext, type SessionContext } from './context.ts'
 import { READING, describe } from './state.ts'
@@ -26,16 +30,29 @@ export const register: Register = on => {
       $.ui.log(`命令注册失败：${String(err)}`, { to: 'debug' })
     }
 
-    await pet(ctx, $, 'waiting', '我来啦～')
+    // 只是打招呼，不算「需要你」（协议 §4.1）
+    await pet(ctx, $, 'waiting', '我来啦～', { attention: false })
     void launchPet($, ctx.runDir)
     void refreshStatus(ctx, $).catch(() => {})
     return started
   })
 
+  on('session.end', async ($, e, next) => {
+    const ended = await next(e)
+    if (ctx) await pet(ctx, $, 'idle', '晚安～', { attention: false })  // TTL 5 分钟后自然消失
+    return ended
+  })
+
+  on('notification', async ($, e, next) => {
+    const done = await next(e)
+    if (ctx) await pet(ctx, $, 'attention', '需要你看一下', { attention: true })  // 权限提醒等非阻塞通知也走这里
+    return done
+  })
+
   on('turn.start', async ($, e, next) => {
     if (ctx && e.agentId === undefined) {
       ctx.toolErrors = 0
-      await pet(ctx, $, 'thinking', '思考中')
+      await pet(ctx, $, 'thinking', '思考中', { attention: false })
     }
     return next(e)
   })
@@ -48,7 +65,8 @@ export const register: Register = on => {
     if (isMain && ctx) {
       try {
         const input = e as unknown as Record<string, unknown>
-        await pet(ctx, $, READING.has(e.tool) ? 'reading' : 'tool', describe(e.tool, input))
+        await pet(ctx, $, READING.has(e.tool) ? 'reading' : 'tool', describe(e.tool, input),
+          { attention: false })
       } catch (err) {
         $.ui.log(`桌宠状态更新失败：${String(err)}`, { to: 'debug' })
       }
@@ -60,12 +78,11 @@ export const register: Register = on => {
       try {
         if (ran.deny === undefined && ran.isError === true) {
           ctx.toolErrors += 1
-          // 连续出错 3 次：石化彩蛋
-          if (ctx.toolErrors >= 3) await pet(ctx, $, 'stone', '石化了…')
-          else await pet(ctx, $, 'error', '出错了…')
+          // 连续出错 3 次的石化彩蛋由渲染层看连续 error 触发（协议 §3），这里只写 error
+          await pet(ctx, $, 'error', '出错了…', { attention: true })
         } else {
           ctx.toolErrors = 0
-          await pet(ctx, $, 'thinking', '思考中')
+          await pet(ctx, $, 'thinking', '思考中', { attention: false })
         }
       } catch (err) {
         $.ui.log(`桌宠状态更新失败：${String(err)}`, { to: 'debug' })
@@ -87,14 +104,15 @@ export const register: Register = on => {
     if (e.agentId !== undefined) return done
 
     if (e.reason === 'aborted') {
-      await pet(ctx, $, 'aborted', '被打断了…')
+      // 兼容旧行为（协议 §3）：aborted 映射到 error
+      await pet(ctx, $, 'error', '被打断了…', { attention: true })
     } else if (e.reason === 'error' || e.reason === 'refusal') {
-      await pet(ctx, $, 'error', '出错了，来看看？', 'error')
+      await pet(ctx, $, 'error', '出错了，来看看？', { sound: 'error', attention: true })
     } else if (e.durationMs > 180_000) {
       // 干了 3 分钟以上的大活：撒花
-      await pet(ctx, $, 'celebrate', '搞定啦！轮到你～', 'done')
+      await pet(ctx, $, 'celebrate', '搞定啦！轮到你～', { sound: 'done', attention: false })
     } else {
-      await pet(ctx, $, 'waiting', '轮到你啦！', 'done')
+      await pet(ctx, $, 'waiting', '轮到你啦！', { sound: 'done', attention: true })
     }
     return done
   })

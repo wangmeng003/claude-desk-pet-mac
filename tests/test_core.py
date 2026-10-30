@@ -25,12 +25,33 @@ class TestNormalize:
                                   'sound': 'done'})
         assert s == models.SessionState('tool', '在跑命令…', 'demo', 'done')
 
-    def test_unknown_state_falls_back(self):
-        assert view_model.normalize({'state': 'nope', 'text': 'x'}).state == 'waiting'
+    def test_unknown_state_falls_back_to_idle(self):
+        """协议 §1.3：未知 state 回退 idle（不再沿用旧的 waiting 回退）。"""
+        assert view_model.normalize({'state': 'nope', 'text': 'x'}).state == 'idle'
 
     def test_missing_everything(self):
         s = view_model.normalize({})
-        assert s == models.SessionState('waiting', '', '', None)
+        assert s == models.SessionState('idle', '', '', None)
+
+    def test_aborted_maps_to_error(self):
+        """协议 §3 兼容旧行为：aborted → error，文案保留。"""
+        s = view_model.normalize({'state': 'aborted', 'text': '被打断了…'})
+        assert s.state == 'error'
+        assert s.text == '被打断了…'
+
+    def test_stone_is_not_a_protocol_state(self):
+        """stone 是渲染层彩蛋，写进状态文件按未知状态回退 idle。"""
+        assert view_model.normalize({'state': 'stone', 'text': '石化了…'}).state == 'idle'
+
+    def test_attention_is_known(self):
+        assert view_model.normalize({'state': 'attention', 'text': '需要你看一下'}).state == 'attention'
+
+    def test_v1_fields_ignored_by_reader(self):
+        """v1 新增字段（v/session/agent/attention）读取方容忍忽略。"""
+        s = view_model.normalize({'v': 1, 'session': 's1', 'agent': 'claude-code',
+                                  'state': 'tool', 'text': 'x', 'project': 'p',
+                                  'ts': 1793375735.4, 'sound': None, 'attention': True})
+        assert s == models.SessionState('tool', 'x', 'p', None)
 
     def test_sound_filtered(self):
         assert view_model.normalize({'sound': 'hacked'}).sound is None
@@ -48,9 +69,9 @@ class TestNormalize:
         assert s.text == '在跑命令…'
 
     def test_unhashable_state_does_not_raise(self):
-        """state 是个 list 时不能抛 TypeError（unhashable），要回退成 waiting。"""
+        """state 是个 list 时不能抛 TypeError（unhashable），要回退成 idle。"""
         s = view_model.normalize({'state': ['tool'], 'text': 'x'})
-        assert s.state == 'waiting'
+        assert s.state == 'idle'
         assert s.text == 'x'
 
 

@@ -1,6 +1,6 @@
-// state_writer：写出的状态文件内容（跟状态协议 §2 的 schema 对齐）。
+// state_writer：写出的状态文件内容（跟状态协议 v1 §2 的 schema 对齐）。
 import { test } from 'node:test'
-import { strictEqual, ok } from 'node:assert'
+import { strictEqual, ok, deepStrictEqual } from 'node:assert'
 import type { EngineInterface } from 'claude-code'
 import type { SessionContext } from './context.ts'
 import { pet } from './state_writer.ts'
@@ -19,14 +19,29 @@ function make$(now: number) {
   return { $, written }
 }
 
-test('pet：写出的字段跟状态协议一致', async () => {
+test('pet：v1 schema 必填字段（v/session/agent/state/text/project/ts）', async () => {
   const { $, written } = make$(1793375735466)
-  await pet(ctx, $, 'waiting', '我来啦～')
+  await pet(ctx, $, 'waiting', '我来啦～', { attention: false, sound: 'done' })
   const data = JSON.parse(written['/run/sessions/s1.json'])
+  strictEqual(data.v, 1)
+  strictEqual(data.session, 's1')        // sessionKey 去掉前缀
+  strictEqual(data.agent, 'claude-code')
   strictEqual(data.state, 'waiting')
   strictEqual(data.text, '我来啦～')
   strictEqual(data.project, 'demo')
-  strictEqual(data.sound, undefined)  // 没给 sound 就别写这个键
+  strictEqual(data.sound, 'done')
+  strictEqual(data.attention, false)
+  // 字段集合不多不少（协议 §2；可选键给了才写）
+  deepStrictEqual(Object.keys(data).sort(),
+    ['agent', 'attention', 'project', 'session', 'sound', 'state', 'text', 'ts', 'v'])
+})
+
+test('pet：可选键（sound/attention）没给就不写', async () => {
+  const { $, written } = make$(1793375735466)
+  await pet(ctx, $, 'tool', '在改 x.ts')
+  const data = JSON.parse(written['/run/sessions/s1.json'])
+  strictEqual('sound' in data, false)
+  strictEqual('attention' in data, false)
 })
 
 test('pet：ts 用 Unix 秒（协议 §2），不是毫秒', async () => {

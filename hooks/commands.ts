@@ -24,7 +24,7 @@ export async function petCommand(ctx: SessionContext, $: EngineInterface, e: unk
     if (!(await launchPet($, ctx.runDir))) {
       return { text: '环境已就绪，但桌宠启动失败。详情见 ~/.claude/desk-pet/mod-launch.log。' }
     }
-    await pet(ctx, $, 'waiting', '我在这儿～')
+    await pet(ctx, $, 'waiting', '我在这儿～', { attention: false })
     return { text: '桌宠环境已就绪，桌宠已召唤。' }
   }
 
@@ -33,6 +33,6 @@ export async function petCommand(ctx: SessionContext, $: EngineInterface, e: unk
       text: '桌宠没起来。macOS 第一次运行需要准备环境，运行 /pet setup 重试；详情见 ~/.claude/desk-pet/setup.log。',
     }
   }
-  await pet(ctx, $, 'waiting', '我在这儿～')
+  await pet(ctx, $, 'waiting', '我在这儿～', { attention: false })
   return { text: '桌宠已召唤（如果它本来就开着，就不会再开第二个）。' }
 }

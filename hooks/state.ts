@@ -1,7 +1,14 @@
 // state：工具名 → 桌宠状态/气泡文案的纯映射。无副作用，可单测。
+// 状态集合 = 状态协议 v1（specs/state.md §3）的 8 个核心状态；
+// aborted 映射到 error、stone 是渲染层彩蛋，都不是协议状态，不在这里出现。
 
-// 桌宠的状态（悬浮窗程序按这个名字换表情）
-export type PetState = 'thinking' | 'tool' | 'reading' | 'waiting' | 'celebrate' | 'error' | 'aborted' | 'stone'
+// 桌宠的状态（悬浮窗程序按这个名字换表情）。
+// STATES 与 contracts/state.schema.json 的 enum 对齐（契约测试锁定），
+// Python 侧的 core.models.PROTOCOL_STATES 也对着同一份 schema。
+export const STATES = [
+  'idle', 'thinking', 'tool', 'reading', 'waiting', 'attention', 'celebrate', 'error',
+] as const
+export type PetState = typeof STATES[number]
 
 // 读资料类工具 → 记笔记表情；其余 → 敲键盘
 export const READING = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'NotebookRead'])

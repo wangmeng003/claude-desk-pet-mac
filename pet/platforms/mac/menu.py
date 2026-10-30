@@ -27,6 +27,11 @@ class PetMenu:
         self.sound_item.setTarget_(pet.view)
         self.sound_item.setState_(1 if pet.settings.get('sound', True) else 0)
         self.menu.addItem_(self.sound_item)
+        self.privacy_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            '隐私模式（不写项目/文件名）', 'togglePrivacy:', '')
+        self.privacy_item.setTarget_(pet.view)
+        self.privacy_item.setState_(1 if pet.settings.get('privacy') else 0)
+        self.menu.addItem_(self.privacy_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
         quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('退出桌宠', 'quit:', '')
         quit_item.setTarget_(pet.view)

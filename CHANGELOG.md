@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- M1 #8：隐私模式 + 状态文件健壮性收口：
+  - 桌宠菜单新增「隐私模式」开关（写 `settings.json` 的 `privacy`）；hooks 写状态时
+    60s 缓存重读该开关，开启后 `project` 置空、tool/reading 的动态文案（带文件名）换成
+    「在干活…/在看资料…」——收口在写入方，状态文件、气泡、将来的通知自然都干净
+  - 文案底线（无论开关）：只写文件 basename，命令内容/prompt 一概不进状态文件（测试锁定）
+  - 坏状态文件：读取侧跳过不崩（已有测试），`/pet doctor` 标记 `state=坏文件`（记录）
+  - 旧格式兼容：`aborted`→error、缺字段容忍（#10 已落地）
+  - 原子写偏离说明：引擎 `fs` 只有 `write` 没有 rename，状态文件写不了 tmp+rename；
+    由读取侧损坏容忍兜底（半截 JSON 跳过），设置文件已是 tmp+`os.replace` 原子写
 - M1 #7：`/pet doctor` 自诊断——`pet/doctor.py` 一趟收集：平台/Python、插件版本、
   运行目录可写性（不可写即短路）、状态目录（最新 3 个会话文件的 state 与年龄、坏文件标记）、
   依赖（macOS venv 的 Pillow+pyobjc / Windows 的 Pillow+tkinter）、单实例（锁文件 PID 判活 +

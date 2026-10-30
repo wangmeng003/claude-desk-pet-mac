@@ -46,3 +46,12 @@ test('describe：超长文件名/工具名也要截断', () => {
   strictEqual(describe('Read', { file_path: `/x/${'f'.repeat(200)}.md` }).length, 60)
   strictEqual(describe('mcp__' + 'x'.repeat(200), {}).length, 60)
 })
+
+test('隐私底线（#8）：文案只含文件名，绝不写完整路径/命令/prompt', () => {
+  // 绝对路径只留最后一段
+  strictEqual(describe('Edit', { file_path: '/Users/someone/secret/x.ts' }), '在改 x.ts')
+  strictEqual(describe('Write', { file_path: 'C:\\Users\\someone\\y.md' }), '在改 y.md')
+  // 命令内容、prompt 一概不进文案
+  strictEqual(describe('Bash', { command: 'rm -rf ~/.ssh' }), '在跑命令…')
+  strictEqual(describe('TodoWrite', { prompt: '帮我看看 ~/.env 里的 KEY' }), '在用 TodoWrite')
+})

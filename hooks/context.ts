@@ -11,6 +11,8 @@ export type SessionContext = {
   sessionKey: string
   toolErrors: number
   petCheckedAt: number  // 上次探活时间戳（ms），ensurePetAlive 节流用
+  privacy?: boolean       // 隐私模式（#8）：不写项目名/文件名。桌宠菜单改 settings.json，这里 60s 缓存重读
+  privacyCheckedAt?: number
 }
 
 export async function initContext($: EngineInterface, e: { cwd: string }): Promise<SessionContext> {

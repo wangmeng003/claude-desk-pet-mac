@@ -133,6 +133,12 @@ class Pet:
         self.settings['sound'] = bool(sender.state())
         save_settings(self.settings)
 
+    def togglePrivacy_(self, sender):
+        # 隐私模式（#8）：状态文件不写项目名/文件名；hooks 一分钟内重读到开关
+        sender.setState_(0 if sender.state() else 1)
+        self.settings['privacy'] = bool(sender.state())
+        save_settings(self.settings)
+
     def quit_(self, sender):
         NSApplication.sharedApplication().terminate_(None)
 

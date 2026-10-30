@@ -271,6 +271,9 @@ class Pet:
         self.menu.add_checkbutton(label='切到 Claude 时自动隐藏', variable=self.hide_var, command=self.toggle_hide)
         self.sound_var = tk.BooleanVar(value=self.settings.get('sound', True))
         self.menu.add_checkbutton(label='提示音', variable=self.sound_var, command=self.toggle_sound)
+        self.privacy_var = tk.BooleanVar(value=self.settings.get('privacy', False))
+        self.menu.add_checkbutton(label='隐私模式（不写项目/文件名）', variable=self.privacy_var,
+                                  command=self.toggle_privacy)
         self.menu.add_separator()
         self.menu.add_command(label='退出桌宠', command=self.root.destroy)
 
@@ -288,6 +291,11 @@ class Pet:
 
     def toggle_sound(self):
         self.settings['sound'] = self.sound_var.get()
+        save_settings(self.settings)
+
+    def toggle_privacy(self):
+        # 隐私模式（#8）：状态文件不写项目名/文件名；hooks 一分钟内重读到开关
+        self.settings['privacy'] = self.privacy_var.get()
         save_settings(self.settings)
 
     # ---------- 鼠标 ----------

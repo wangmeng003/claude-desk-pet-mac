@@ -1,7 +1,7 @@
 """poll() 的状态映射与提示音门控锁定 —— sessions → view model 的核心行为。"""
 import time
 
-from conftest import make_pet, pet_mac, requires_platform, write_session
+from conftest import _VarStub, make_pet, pet_mac, pet_win, requires_platform, write_session
 
 
 @requires_platform
@@ -71,12 +71,17 @@ class TestSoundGating:
         pet.poll()
         assert plays and plays[0].endswith('done.wav')
 
-    def test_sound_disabled_in_settings(self, pet_state, monkeypatch):
+    def test_sound_disabled(self, pet_state, monkeypatch):
         petmod, _tmp, sessions = pet_state
         plays = self._record_plays(petmod, monkeypatch)
         write_session(sessions, 's1', {'state': 'waiting', 'text': ''}, age=20)
         pet = make_pet()
-        pet.settings['sound'] = False
+        # 平台差异（golden 锁定现状）：mac 版 poll 读 settings['sound']；
+        # Windows 版读 sound_var（make_menu 时从 settings 初始化的 UI 状态）
+        if pet_win is not None and petmod is pet_win:
+            pet.sound_var = _VarStub(False)
+        else:
+            pet.settings['sound'] = False
         pet.poll()
         write_session(sessions, 's1', {'state': 'celebrate', 'text': '搞定', 'sound': 'done'}, age=1)
         pet.poll()

@@ -1,6 +1,7 @@
 # 里程碑执行计划
 
 > 状态：v1.0 · 2026-10-30  
+> 任务追踪：M1 → [Issue #17](https://github.com/wangmeng003/claude-desk-pet-mac/issues/17)，M2 → [Issue #18](https://github.com/wangmeng003/claude-desk-pet-mac/issues/18)（含 P1/P2 子任务拆分）  
 > 关联：[路线图](ROADMAP.md) · [架构](ARCHITECTURE.md) · [状态](specs/state.md) · [权限](specs/permission.md) · [主题](specs/theme.md)
 
 这份文档把路线图里的 M0–M5 展开成可执行的范围、非目标、验收和架构门槛。**战略取舍看 [ROADMAP.md](ROADMAP.md)，技术契约看 `specs/`，具体任务进 GitHub Issues。**

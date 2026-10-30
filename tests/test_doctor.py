@@ -81,6 +81,20 @@ def test_unwritable_run_dir_is_err_and_short_circuits(tmp_path):
     ro.chmod(0o755)  # 收尾，方便 tmp_path 清理
 
 
+def test_ansi_codepage_stdout_does_not_crash(tmp_path):
+    # 回归（Windows CI 实锤）：默认 ANSI 代码页编不了中文，doctor 死在第一行 print。
+    # 用 PYTHONIOENCODING=cp1252 模拟，doctor 应自我 reconfigure 成 UTF-8 照常输出。
+    sessions = tmp_path / 'sessions'
+    sessions.mkdir()
+    (sessions / 's1.json').write_text('{"state": "idle"}', encoding='utf-8')
+    env = dict(os.environ, PYTHONIOENCODING='cp1252')
+    r = subprocess.run(
+        [sys.executable, str(DOCTOR), str(tmp_path), str(REPO), PORT],
+        capture_output=True, text=True, timeout=90, env=env)
+    assert '[ok] 平台：' in r.stdout
+    assert '结论：' in r.stdout
+
+
 def test_home_paths_are_redacted(tmp_path, monkeypatch):
     fake_home = tmp_path / 'home'
     fake_home.mkdir()

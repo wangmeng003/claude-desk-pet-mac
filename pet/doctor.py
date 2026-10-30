@@ -19,6 +19,16 @@ LOG_NAMES = ('pet-error.log', 'mod-launch.log', 'setup.log', 'launch.log')
 TAIL_LINES = 2
 TAIL_CHARS = 120
 
+# Windows 默认 stdout 是 ANSI 代码页（cp1252 之类），中文 print 直接 UnicodeEncodeError。
+# hooks 抓的就是本脚本 stdout，先把输出流钉死成 UTF-8 再干活。
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, 'reconfigure', None)  # TextIO 协议没有这个方法，只有真实 TextIOWrapper 有
+    if _reconfigure is not None:
+        try:
+            _reconfigure(encoding='utf-8')
+        except ValueError:
+            pass
+
 ok_n = warn_n = err_n = 0
 
 

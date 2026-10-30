@@ -34,12 +34,21 @@ def pid_alive(pid) -> bool:
     if not valid_pid(pid):
         return False
     if sys.platform == 'win32':
+        # OpenProcess 对「已退出但句柄还被别人攥着」的进程照样返回句柄
+        # （CI 的 job 对象就会这样），必须再看退出码是不是 STILL_ACTIVE，
+        # 否则死掉的桌宠会被误判成活着，新实例起不来。
         import ctypes
-        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        kernel32 = ctypes.windll.kernel32
+        h = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
             return False
-        ctypes.windll.kernel32.CloseHandle(h)
-        return True
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(h, ctypes.byref(code)):
+                return False
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(h)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

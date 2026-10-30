@@ -109,4 +109,6 @@ def test_home_paths_are_redacted(tmp_path, monkeypatch):
         [sys.executable, str(DOCTOR), str(sessions.parent), str(REPO), PORT],
         capture_output=True, encoding='utf-8', timeout=90, env=env)
     assert str(fake_home) not in r.stdout
-    assert '~/.claude/desk-pet' in r.stdout
+    # 路径分隔符按平台：Windows redact 后是 ~\.claude\desk-pet
+    expected = '~\\.claude' if sys.platform == 'win32' else '~/.claude'
+    assert expected in r.stdout

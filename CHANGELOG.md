@@ -35,6 +35,9 @@
     被当死的、每 10s 拉起循环；现在 listen + 后台 accept，探活真实可用（含回归测试）
   - 修复 TIME_WAIT 重绑：探活连接由服务端先关，端口留 ~30s TIME_WAIT，桌宠退出后
     立刻重启恒失败；`bind` 前设 `SO_REUSEADDR`（Windows 默认允许重绑，不动）
+  - 修复 Windows 判活误报：`OpenProcess` 对「已退出但句柄被持有」的进程照样给句柄
+    （CI 的 job 对象就会这样），死桌宠被当活的、新实例起不来；补 `GetExitCodeProcess`
+    判 STILL_ACTIVE（259）
   - hooks 自动拉起传 `--quiet`：单实例冲突只写 `pet-error.log` 不弹对话框
     （否则端口被占时每 10s 弹一次）；`--shot` 不再参与抢锁
 - M1 #4：生命周期 = 活跃会话 + 状态 TTL（协议 §1.2），替代 pgrep/tasklist：core 新增 `STATE_TTL`/`is_live_data`/`has_live_session`；双端 `watch_lifecycle` 无活跃会话超 120s 才退出，Windows 终端找不到 claude.exe 误退根治；hooks 新增 `petAlive` 端口探活 + 10s 节流，桌宠被杀后下一个 Claude 事件自动拉起

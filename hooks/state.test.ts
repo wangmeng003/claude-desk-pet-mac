@@ -1,7 +1,7 @@
 // state 纯映射的锁定测试（从 register.ts 原样搬出，行为不变）。
 import { test } from 'node:test'
 import { strictEqual } from 'node:assert'
-import { baseName, describe, READING } from './state.ts'
+import { baseName, clip, describe, READING } from './state.ts'
 
 test('baseName 取路径最后一段（正斜杠/反斜杠/尾斜杠）', () => {
   strictEqual(baseName('/a/b/c.ts'), 'c.ts')
@@ -33,4 +33,16 @@ test('READING：读资料类工具集合', () => {
   strictEqual(READING.has('Read'), true)
   strictEqual(READING.has('WebFetch'), true)
   strictEqual(READING.has('Bash'), false)
+})
+
+test('clip：超过 60 字符的文案截断加省略号', () => {
+  strictEqual(clip('短'), '短')
+  strictEqual(clip('a'.repeat(60)).length, 60)
+  strictEqual(clip('a'.repeat(61)).length, 60)
+  strictEqual(clip('a'.repeat(61)).endsWith('…'), true)
+})
+
+test('describe：超长文件名/工具名也要截断', () => {
+  strictEqual(describe('Read', { file_path: `/x/${'f'.repeat(200)}.md` }).length, 60)
+  strictEqual(describe('mcp__' + 'x'.repeat(200), {}).length, 60)
 })

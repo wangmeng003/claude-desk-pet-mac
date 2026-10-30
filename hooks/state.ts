@@ -8,15 +8,19 @@ export const READING = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch',
 
 export const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
+// 气泡文案最长 60 字符（状态协议 §4.3），超了截断加省略号
+export const MAX_TEXT = 60
+export const clip = (s: string) => (s.length > MAX_TEXT ? `${s.slice(0, MAX_TEXT - 1)}…` : s)
+
 // 工具名 → 气泡里的一句话
 export const describe = (tool: string, input: Record<string, unknown>) => {
   const file = typeof input.file_path === 'string' ? baseName(input.file_path) : ''
   if (tool === 'Bash' || tool === 'PowerShell') return '在跑命令…'
-  if (tool === 'Edit' || tool === 'Write') return file ? `在改 ${file}` : '在改文件…'
-  if (tool === 'Read') return file ? `在读 ${file}` : '在翻文件…'
+  if (tool === 'Edit' || tool === 'Write') return clip(file ? `在改 ${file}` : '在改文件…')
+  if (tool === 'Read') return clip(file ? `在读 ${file}` : '在翻文件…')
   if (tool === 'Grep' || tool === 'Glob') return '在找东西…'
   if (tool === 'WebSearch' || tool === 'WebFetch') return '在上网查…'
   if (tool === 'Agent') return '派小助手干活中'
-  if (tool.startsWith('mcp__')) return `在用 ${tool.split('__').pop()}`
-  return `在用 ${tool}`
+  if (tool.startsWith('mcp__')) return clip(`在用 ${tool.split('__').pop()}`)
+  return clip(`在用 ${tool}`)
 }

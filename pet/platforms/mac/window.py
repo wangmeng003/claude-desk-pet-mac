@@ -72,7 +72,23 @@ class PetView(NSView):
         text = pet.display_text()
         pad = round(10 * s)
         attrs = {NSFontAttributeName: ctl.font, NSForegroundColorAttributeName: TEXT}
-        tsz = NSAttributedString.alloc().initWithString_attributes_(text, attrs).size()
+
+        def measure(t):
+            return NSAttributedString.alloc().initWithString_attributes_(t, attrs).size()
+
+        # 气泡宽度被窗口卡死（最多 W-4），文字太长会溢出气泡，
+        # 逐字截到放得下为止。
+        limit = W - 4 - 2 * pad
+        tsz = measure(text)
+        if tsz.width > limit:
+            trimmed = text
+            while trimmed:
+                trimmed = trimmed[:-1]
+                tsz = measure(trimmed + '…')
+                if tsz.width <= limit:
+                    break
+            text = trimmed + '…'
+            tsz = measure(text)
         bw = min(max(tsz.width + 2 * pad, 80 * s), W - 4)
         x0 = (W - bw) / 2
         y_top, y_bot = H - 2 * s, H - 38 * s           # 气泡身体（视图坐标系，原点在左下）

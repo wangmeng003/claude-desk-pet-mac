@@ -195,11 +195,25 @@ class Pet:
             self.sprite = self.canvas.create_image(self.W // 2, self.H, anchor='s', image=image)
         self.draw_bubble()
 
+    def measure(self, text):
+        """用 Tk 的字体度量量文字宽度。"""
+        try:
+            return int(self.canvas.tk.call('font', 'measure', self.font, text))
+        except Exception:
+            return 0
+
     def draw_bubble(self):
         c, s = self.canvas, self.scale
         c.delete('bubble')
         self.bubble_text = None
         text = self.display_text()
+        # 气泡宽度被窗口卡死，文字太长会溢出气泡，逐字截到放得下为止
+        limit = self.W - 4
+        if self.measure(text) > limit:
+            trimmed = text
+            while trimmed and self.measure(trimmed + '…') > limit:
+                trimmed = trimmed[:-1]
+            text = trimmed + '…'
         tid = c.create_text(self.W // 2, round(20 * s), text=text, font=self.font, fill='#3a2a1a', tags='bubble')
         box = c.bbox(tid)
         if not box:

@@ -19,6 +19,8 @@
   - 状态文件 `ts` 改成 Unix 秒（状态协议 §2 写的是秒，之前写的是毫秒；将来按 ts 算 TTL 会把文件当未来时间戳丢掉）
   - 立绘缺失/损坏不再让桌宠起不来；settings 里的坐标是 None/字符串时回退默认位置
   - 记异常本身不再抛异常（AppKit 会为 drawRect 里的异常杀进程）
+  - **气泡不再被长文案撑破**：气泡宽度被窗口卡死，文件名一长文字就溢出到气泡外面。
+    mac/Windows 都改成逐字截到放得下为止（加省略号）；文案本身按状态协议 §4.3 截到 60 字符
 - hooks 单测从 12 个增加到 22 个（新增 launcher 运行时解析、state_writer 状态文件 schema）
 
 - M1 Step 3：`hooks/register.ts` 按职责拆为 `context`（每会话一个 SessionContext，收拢模块级可变变量）、`state`（工具名→状态/文案纯映射）、`state_writer`（状态文件写入）、`accounting`（token/花费记账）、`statusline`（状态栏与统计文本格式化）、`launcher`（venv/启动）、`commands`（/pet、/token-stats 用例）；register 只注册事件与命令。行为不变，tsc 零配置差异通过

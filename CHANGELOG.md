@@ -21,8 +21,10 @@
   - 记异常本身不再抛异常（AppKit 会为 drawRect 里的异常杀进程）
   - **气泡不再被长文案撑破**：气泡宽度被窗口卡死，文件名一长文字就溢出到气泡外面。
     mac/Windows 都改成逐字截到放得下为止（加省略号）；文案本身按状态协议 §4.3 截到 60 字符
-- hooks 单测从 12 个增加到 22 个（新增 launcher 运行时解析、state_writer 状态文件 schema）
-
+- hooks 单测从 12 个增加到 24 个（新增 launcher 运行时解析、state_writer 状态文件 schema）
+- CI：hooks 单测改成 `node --test --experimental-strip-types hooks/*.test.ts`。
+  node 22 的 `--test` 不接受目录参数，会把目录当模块加载报 `MODULE_NOT_FOUND` 直接失败
+  （本机 node 26 上两种写法都能过，只有 node 22 会炸，所以要在 CI 的 22 上验）
 - M1 Step 3：`hooks/register.ts` 按职责拆为 `context`（每会话一个 SessionContext，收拢模块级可变变量）、`state`（工具名→状态/文案纯映射）、`state_writer`（状态文件写入）、`accounting`（token/花费记账）、`statusline`（状态栏与统计文本格式化）、`launcher`（venv/启动）、`commands`（/pet、/token-stats 用例）；register 只注册事件与命令。行为不变，tsc 零配置差异通过
 - hooks 引入 node:test 单测（12 个）：state 映射、accounting 累计/花费增量钳制、statusline 缩写与命中率；CI ts job 增加单测步，node.d.ts 提供 node:test/assert 最小类型 shim
 - M1 Step 2：抽出 `pet/platforms/mac/`（window=PetView 绘制/拖拽/窗口几何、menu=右键菜单、focus=进程/前台检测、notify=提示音），pet_mac.py 变为 composition root（settings/core/platforms 组装 + poll/tick/watch_* 编排）；golden 测试零改动全绿，--shot 冒烟新旧渲染逐像素等价

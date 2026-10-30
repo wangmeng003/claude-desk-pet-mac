@@ -6,7 +6,8 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "types": []
   },
-  "include": ["register.ts", "claude-code.d.ts"]
+  "include": ["*.ts"]
 }

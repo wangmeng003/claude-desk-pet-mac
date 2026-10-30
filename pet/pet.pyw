@@ -77,6 +77,11 @@ user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
 
+def _ps_quote(text):
+    """PowerShell 单引号字符串字面量：单引号翻倍转义（项目目录名可能带 '）。"""
+    return text.replace("'", "''")
+
+
 def toast(title, body):
     """原生 Toast 通知（#6）：PowerShell 借 WinRT 模板发一条，AUMID 挂 PowerShell。
     点按拿不到回调（点按聚焦做不到），正文自带「双击桌宠回到终端」。失败静默。"""
@@ -86,8 +91,8 @@ def toast(title, body):
         "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
         "[Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
         "$x = $t.GetElementsByTagName('text');"
-        f"$x.Item(0).AppendChild($t.CreateTextNode('{title}')) | Out-Null;"
-        f"$x.Item(1).AppendChild($t.CreateTextNode('{body}')) | Out-Null;"
+        f"$x.Item(0).AppendChild($t.CreateTextNode('{_ps_quote(title)}')) | Out-Null;"
+        f"$x.Item(1).AppendChild($t.CreateTextNode('{_ps_quote(body)}')) | Out-Null;"
         "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("
         "'{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')"
         ".Show([Windows.UI.Notifications.ToastNotification]::new($t))"

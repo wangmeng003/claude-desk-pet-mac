@@ -14,9 +14,11 @@ PORT = '47790'  # 测试专用端口，避开真实桌宠
 
 
 def run_doctor(run_dir, port=PORT):
+    # doctor 的 stdout 已钉死 UTF-8；父进程解码也必须显式 utf-8——
+    # Windows 上 text=True 会用 cp1252 解码 UTF-8 字节，reader 线程炸掉、stdout 变 None
     return subprocess.run(
         [sys.executable, str(DOCTOR), str(run_dir), str(REPO), port],
-        capture_output=True, text=True, timeout=90)
+        capture_output=True, encoding='utf-8', timeout=90)
 
 
 def test_healthy_dir_reports_env_sessions_logs(tmp_path):
@@ -90,7 +92,7 @@ def test_ansi_codepage_stdout_does_not_crash(tmp_path):
     env = dict(os.environ, PYTHONIOENCODING='cp1252')
     r = subprocess.run(
         [sys.executable, str(DOCTOR), str(tmp_path), str(REPO), PORT],
-        capture_output=True, text=True, timeout=90, env=env)
+        capture_output=True, encoding='utf-8', timeout=90, env=env)
     assert '[ok] 平台：' in r.stdout
     assert '结论：' in r.stdout
 
@@ -105,6 +107,6 @@ def test_home_paths_are_redacted(tmp_path, monkeypatch):
     env = dict(os.environ, HOME=str(fake_home))
     r = subprocess.run(
         [sys.executable, str(DOCTOR), str(sessions.parent), str(REPO), PORT],
-        capture_output=True, text=True, timeout=90, env=env)
+        capture_output=True, encoding='utf-8', timeout=90, env=env)
     assert str(fake_home) not in r.stdout
     assert '~/.claude/desk-pet' in r.stdout

@@ -6,6 +6,7 @@ import ctypes
 import ctypes.wintypes as wt
 import math
 import os
+import subprocess
 import sys
 import time
 import tkinter as tk
@@ -74,6 +75,46 @@ ORANGE = '#e8743b'
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
+
+
+def toast(title, body):
+    """原生 Toast 通知（#6）：PowerShell 借 WinRT 模板发一条，AUMID 挂 PowerShell。
+    点按拿不到回调（点按聚焦做不到），正文自带「双击桌宠回到终端」。失败静默。"""
+    ps = (
+        "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications,"
+        " ContentType = WindowsRuntime] | Out-Null;"
+        "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
+        "[Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+        "$x = $t.GetElementsByTagName('text');"
+        f"$x.Item(0).AppendChild($t.CreateTextNode('{title}')) | Out-Null;"
+        f"$x.Item(1).AppendChild($t.CreateTextNode('{body}')) | Out-Null;"
+        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("
+        "'{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')"
+        ".Show([Windows.UI.Notifications.ToastNotification]::new($t))"
+    )
+    try:
+        subprocess.Popen(
+            ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+def flash_claude():
+    """闪 Claude 窗口任务栏按钮（#6）：Toast 之外再给一个视觉提示。"""
+    hwnd = find_claude_window()
+    if not hwnd:
+        return
+
+    class FLASHWINFO(ctypes.Structure):
+        _fields_ = [('cbSize', wt.UINT), ('hwnd', wt.HWND), ('dwFlags', wt.DWORD),
+                    ('uCount', wt.UINT), ('dwTimeout', wt.DWORD)]
+    FLASHW_ALL = 3
+    info = FLASHWINFO(ctypes.sizeof(FLASHWINFO), hwnd, FLASHW_ALL, 3, 0)
+    try:
+        user32.FlashWindowEx(ctypes.byref(info))
+    except Exception:
+        pass
 
 
 def process_name(pid):
@@ -274,6 +315,9 @@ class Pet:
         self.privacy_var = tk.BooleanVar(value=self.settings.get('privacy', False))
         self.menu.add_checkbutton(label='隐私模式（不写项目/文件名）', variable=self.privacy_var,
                                   command=self.toggle_privacy)
+        self.notify_var = tk.BooleanVar(value=self.settings.get('notify', True))
+        self.menu.add_checkbutton(label='原生通知', variable=self.notify_var,
+                                  command=self.toggle_notify)
         self.menu.add_separator()
         self.menu.add_command(label='退出桌宠', command=self.root.destroy)
 
@@ -296,6 +340,11 @@ class Pet:
     def toggle_privacy(self):
         # 隐私模式（#8）：状态文件不写项目名/文件名；hooks 一分钟内重读到开关
         self.settings['privacy'] = self.privacy_var.get()
+        save_settings(self.settings)
+
+    def toggle_notify(self):
+        # 原生通知开关（#6）：celebrate/error/attention 三类状态弹 Toast + 闪任务栏
+        self.settings['notify'] = self.notify_var.get()
         save_settings(self.settings)
 
     # ---------- 鼠标 ----------
@@ -363,6 +412,12 @@ class Pet:
                                        winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
                 except Exception:
                     pass
+            # 原生通知（#6）：长任务完成/出错/需要你看，状态切换时 Toast + 闪任务栏
+            if core_view_model.wants_notify(mapped.state, changed, self.settings):
+                toast('Claude 桌宠',
+                      core_view_model.notify_body(mapped.text, mapped.project,
+                                                  bool(self.settings.get('privacy'))))
+                flash_claude()
             if changed:
                 self.hop_at = time.time()
             self.set_sprite(self.effective_state())

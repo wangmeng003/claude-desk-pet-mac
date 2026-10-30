@@ -32,6 +32,11 @@ class PetMenu:
         self.privacy_item.setTarget_(pet.view)
         self.privacy_item.setState_(1 if pet.settings.get('privacy') else 0)
         self.menu.addItem_(self.privacy_item)
+        self.notify_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            '原生通知', 'toggleNotify:', '')
+        self.notify_item.setTarget_(pet.view)
+        self.notify_item.setState_(1 if pet.settings.get('notify', True) else 0)
+        self.menu.addItem_(self.notify_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
         quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('退出桌宠', 'quit:', '')
         quit_item.setTarget_(pet.view)

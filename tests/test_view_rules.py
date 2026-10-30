@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import REPO, make_pet, pet_mac, requires_platform
+from core import view_model as core_view_model
 
 EXPECTED_SPRITES = {
     'thinking': 'smile-closed',
@@ -82,3 +83,30 @@ class TestDisplayText:
         pet.state = 'thinking'
         pet.text = '思考中'
         assert re.fullmatch(r'思考中\.{1,3}', pet.display_text())
+
+
+# ---------- 原生通知策略（#6）----------
+
+def test_wants_notify_three_states():
+    for state in ('celebrate', 'error', 'attention'):
+        assert core_view_model.wants_notify(state, changed=True) is True, state
+
+
+def test_wants_notify_only_on_change():
+    # 同状态重复刷新（changed=False）不通知——「不反复弹窗」
+    assert core_view_model.wants_notify('error', changed=False) is False
+    # 其他状态从不通知
+    for state in ('idle', 'thinking', 'tool', 'reading', 'waiting'):
+        assert core_view_model.wants_notify(state, changed=True) is False, state
+
+
+def test_wants_notify_settings_toggle():
+    assert core_view_model.wants_notify('error', True, {'notify': False}) is False
+    assert core_view_model.wants_notify('error', True, {'notify': True}) is True
+    assert core_view_model.wants_notify('error', True, {}) is True  # 默认开
+
+
+def test_notify_body():
+    assert core_view_model.notify_body('搞定啦！', 'demo', False) == '搞定啦！ · demo（双击桌宠回到终端）'
+    assert core_view_model.notify_body('搞定啦！', 'demo', True) == '搞定啦！（双击桌宠回到终端）'  # 隐私：不带项目名
+    assert core_view_model.notify_body('需要你看一下', '', False) == '需要你看一下（双击桌宠回到终端）'

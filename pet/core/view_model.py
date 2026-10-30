@@ -60,3 +60,29 @@ def display_text_with_dots(state: str, text: str, now: float, state_since: float
 def thinking_dots(text: str, now: float) -> str:
     """'思考中' → '思考中.'/'思考中..'/'思考中...' 循环跳动。"""
     return text + '.' * (int(now * 2.5) % 3 + 1)
+
+
+# 要发原生通知的状态（#6）：长任务完成（celebrate）、出错（error）、需要你看（attention）。
+# 同状态重复刷新由调用方的 changed 挡掉，这里只看状态本身。
+NOTIFY_STATES = frozenset({'celebrate', 'error', 'attention'})
+
+
+def wants_notify(state: str, changed: bool, settings: dict | None = None) -> bool:
+    """状态切换到值得打扰用户的状态时发一次原生通知。
+
+    - settings['notify'] 为 False 时整体关闭（桌宠菜单开关）；
+    - changed=False（同状态重复写文件）不通知，避免反复弹窗。
+    """
+    if settings is not None and not settings.get('notify', True):
+        return False
+    return changed and state in NOTIFY_STATES
+
+
+def notify_body(text: str, project: str, privacy: bool) -> str:
+    """通知正文（#6）：气泡文案 + 聚焦提示；隐私模式下不带项目名。
+
+    通知点按在脚本进程里拿不到回调（点击聚焦做不到），
+    正文常备「双击桌宠回到终端」，失败路径按 issue 要求展示项目名。
+    """
+    head = f'{text} · {project}' if (project and not privacy) else text
+    return f'{head}（双击桌宠回到终端）'

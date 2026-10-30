@@ -21,7 +21,7 @@ from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (测试从入�
 from platforms.mac import focus
 from platforms.mac import window as mac_window
 from platforms.mac.menu import PetMenu
-from platforms.mac.notify import play_sound
+from platforms.mac.notify import notify, play_sound
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUNDS = os.path.join(os.path.dirname(HERE), 'sounds')
@@ -139,6 +139,12 @@ class Pet:
         self.settings['privacy'] = bool(sender.state())
         save_settings(self.settings)
 
+    def toggleNotify_(self, sender):
+        # 原生通知开关（#6）：celebrate/error/attention 三类状态弹系统通知
+        sender.setState_(0 if sender.state() else 1)
+        self.settings['notify'] = bool(sender.state())
+        save_settings(self.settings)
+
     def quit_(self, sender):
         NSApplication.sharedApplication().terminate_(None)
 
@@ -177,6 +183,11 @@ class Pet:
                 self.error_streak = 0
             if mapped.sound and self.settings.get('sound', True) and self.last_mtime_seen:
                 play_sound(os.path.join(SOUNDS, mapped.sound + '.wav'))
+            # 原生通知（#6）：长任务完成/出错/需要你看，状态切换时弹一次
+            if core_view_model.wants_notify(mapped.state, changed, self.settings):
+                notify('Claude 桌宠',
+                       core_view_model.notify_body(mapped.text, mapped.project,
+                                                   bool(self.settings.get('privacy'))))
             if changed:
                 self.hop_at = time.time()
 

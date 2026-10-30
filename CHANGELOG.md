@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- M1 #6：原生通知（celebrate/error/attention 三类状态，状态切换时弹一次）：
+  - macOS：`osascript display notification`（脚本进程稳定免权限；UNUserNotificationCenter 需要真实
+    bundle 身份，点按回调拿不到，留 M2 #11 评估）；accessory 应用无 Dock 图标，「Dock 弹跳」以
+    换状态小跳 + 提示音替代
+  - Windows：PowerShell 借 WinRT 模板发 Toast + `FlashWindowEx` 闪 Claude 窗口任务栏
+  - 「点击通知聚焦终端」偏离说明：两条通知通路都拿不到点按回调，通知正文常备项目名 +
+    「双击桌宠回到终端」（双击聚焦终端两平台已有）；隐私模式下正文不带项目名
+  - 桌宠菜单新增「原生通知」开关（`settings.json` 的 `notify`，默认开）
+  - 通知策略收口在 `core.view_model.wants_notify/notify_body`（纯函数，测试锁定）：
+    同状态重复刷新不弹，「不反复弹窗」
 - M1 #8：隐私模式 + 状态文件健壮性收口：
   - 桌宠菜单新增「隐私模式」开关（写 `settings.json` 的 `privacy`）；hooks 写状态时
     60s 缓存重读该开关，开启后 `project` 置空、tool/reading 的动态文案（带文件名）换成

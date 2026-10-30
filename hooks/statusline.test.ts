@@ -22,7 +22,7 @@ test('hitRate：零输入显示破折号，否则四舍五入取整', () => {
 })
 
 const ctx: SessionContext = {
-  runDir: '', petFile: '', project: 'demo', cwd: '/w/demo', sessionKey: 'session:s1', toolErrors: 0,
+  runDir: '', petFile: '', project: 'demo', cwd: '/w/demo', sessionKey: 'session:s1', toolErrors: 0, petCheckedAt: 0,
 }
 
 function make$(usage: SessionUsage) {

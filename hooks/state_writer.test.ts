@@ -7,7 +7,7 @@ import { pet } from './state_writer.ts'
 
 const ctx: SessionContext = {
   runDir: '/run', petFile: '/run/sessions/s1.json',
-  project: 'demo', cwd: '/w/demo', sessionKey: 'session:s1', toolErrors: 0,
+  project: 'demo', cwd: '/w/demo', sessionKey: 'session:s1', toolErrors: 0, petCheckedAt: 0,
 }
 
 function make$(now: number) {

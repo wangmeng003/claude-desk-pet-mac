@@ -168,9 +168,10 @@ class Pet:
             self.window.show()
             self.hidden = False
 
-    def watch_claude(self):
-        # Claude 关掉两分钟后，桌宠也自己退出
-        if focus.claude_pids():
+    def watch_lifecycle(self):
+        # 没有活跃会话（ts+TTL 判定，#4）超过两分钟，桌宠自己退出。
+        # 不再靠 pgrep claude：Windows 终端里的 Claude 找不到 claude.exe 会误退。
+        if core_sessions.has_live_session(SESSIONS):
             self.last_alive = time.time()
         elif time.time() - self.last_alive > 120:
             NSApplication.sharedApplication().terminate_(None)
@@ -196,7 +197,7 @@ def main():
     NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.25, True, lambda t: pet.poll())
     NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.033, True, lambda t: pet.tick())
     NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.3, True, lambda t: pet.watch_focus())
-    NSTimer.scheduledTimerWithTimeInterval_repeats_block_(30, True, lambda t: pet.watch_claude())
+    NSTimer.scheduledTimerWithTimeInterval_repeats_block_(30, True, lambda t: pet.watch_lifecycle())
     app.run()
 
 

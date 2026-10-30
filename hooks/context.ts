@@ -10,6 +10,7 @@ export type SessionContext = {
   cwd: string
   sessionKey: string
   toolErrors: number
+  petCheckedAt: number  // 上次探活时间戳（ms），ensurePetAlive 节流用
 }
 
 export async function initContext($: EngineInterface, e: { cwd: string }): Promise<SessionContext> {
@@ -29,5 +30,6 @@ export async function initContext($: EngineInterface, e: { cwd: string }): Promi
     cwd: e.cwd,
     sessionKey: `session:${sessionId}`,
     toolErrors: 0,
+    petCheckedAt: 0,
   }
 }

@@ -6,7 +6,6 @@ import ctypes.wintypes as wt
 import math
 import os
 import socket
-import subprocess
 import sys
 import time
 import tkinter as tk
@@ -94,15 +93,6 @@ def find_claude_window():
     return found[0] if found else None
 
 
-def claude_running():
-    try:
-        out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq claude.exe', '/NH'], capture_output=True,
-                             text=True, timeout=10, creationflags=0x08000000).stdout
-        return 'claude.exe' in out.lower()
-    except Exception:
-        return True
-
-
 def load_settings():
     return core_state_reader.load_settings(SETTINGS)
 
@@ -169,7 +159,7 @@ class Pet:
         self.poll()
         self.animate()
         self.watch_focus()
-        self.watch_claude()
+        self.watch_lifecycle()
 
     # ---------- 布局 ----------
     def build(self):
@@ -393,14 +383,15 @@ class Pet:
             self.hidden = False
         self.schedule(300, self.watch_focus)
 
-    def watch_claude(self):
-        # Claude 关掉两分钟后，桌宠也自己退出
-        if claude_running():
+    def watch_lifecycle(self):
+        # 没有活跃会话（ts+TTL 判定，#4）超过两分钟，桌宠自己退出。
+        # 不再靠 tasklist 找 claude.exe：终端里的 Claude 进程名对不上会误退。
+        if core_sessions.has_live_session(SESSIONS):
             self.last_alive = time.time()
         elif time.time() - self.last_alive > 120:
             self.root.destroy()
             return
-        self.schedule(30000, self.watch_claude)
+        self.schedule(30000, self.watch_lifecycle)
 
 
 if __name__ == '__main__':

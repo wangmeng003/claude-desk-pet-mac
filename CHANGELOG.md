@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- M1 #4：生命周期 = 活跃会话 + 状态 TTL（协议 §1.2），替代 pgrep/tasklist：core 新增 `STATE_TTL`/`is_live_data`/`has_live_session`；双端 `watch_lifecycle` 无活跃会话超 120s 才退出，Windows 终端找不到 claude.exe 误退根治；hooks 新增 `petAlive` 端口探活 + 10s 节流，桌宠被杀后下一个 Claude 事件自动拉起
 - M1 #10：状态协议 v1 落地（specs/state.md）——8 事件映射 + schema 对齐 + 契约测试：
   - hooks 写入方按协议 §4.1 全量映射：`session.start`→waiting(false)、`turn.start`→thinking、
     `tool.call`→tool/reading、工具失败→error(true)、`turn.complete`→waiting(true)/celebrate(false)/error，

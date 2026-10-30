@@ -25,6 +25,20 @@ IDLE_TEXT = '在发呆～ zZ'
 
 SOUNDS = ('done', 'error')  # 状态文件里合法的声音字段值
 
+# 状态 TTL（specs/state.md §1.2）：now - ts 超过 TTL 视为该会话不再活跃。
+# 生命周期（#4）用它判断桌宠何时退出；聚合展示（M3）用它过滤过期会话。
+STATE_TTL = {
+    'thinking': 30 * 60,
+    'tool': 30 * 60,
+    'reading': 30 * 60,
+    'waiting': 24 * 3600,
+    'attention': 24 * 3600,
+    'error': 24 * 3600,
+    'celebrate': 5 * 60,
+    'idle': 5 * 60,
+}
+FUTURE_TS_TOLERANCE = 5 * 60  # ts 在未来超过 5 分钟 = 坏数据（写入方时钟异常）
+
 
 @dataclass(frozen=True)
 class SessionState:

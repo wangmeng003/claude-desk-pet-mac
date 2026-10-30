@@ -19,7 +19,7 @@ function make$(usage: SessionUsage = { context: {}, rateLimits: [] }) {
 }
 
 const ctx = (sessionKey = 'session:s1', cwd = '/w/demo'): SessionContext => ({
-  runDir: '/tmp/desk-pet', petFile: '', project: 'demo', cwd, sessionKey, toolErrors: 0,
+  runDir: '/tmp/desk-pet', petFile: '', project: 'demo', cwd, sessionKey, toolErrors: 0, petCheckedAt: 0,
 })
 
 const U = (i: number, o: number, r: number, w: number) => ({

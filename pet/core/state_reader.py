@@ -1,7 +1,9 @@
-# core：状态文件的读取、解析、校验、TTL。只允许依赖 stdlib + fs。
+# core：状态文件的读取、解析、校验、TTL。只允许依赖 models + stdlib + fs。
 import json
 import os
 import time
+
+from . import models
 
 EXPIRE_AFTER = 2 * 86400  # 状态文件保留两天，scan 时顺手清掉更旧的
 
@@ -16,6 +18,29 @@ def file_mtime(path):
 
 def is_expired(mtime: float, now: float | None = None) -> bool:
     return (time.time() if now is None else now) - mtime > EXPIRE_AFTER
+
+
+def canonical_state(state) -> str:
+    """原始 state 字段 → 协议状态（与 view_model.normalize 同一套回退）。
+
+    'aborted' 是旧格式，映射到 'error'；未知/缺失/非字符串回退 'idle'。
+    """
+    if state == 'aborted':
+        return 'error'
+    return state if state in models.STATE_TTL else 'idle'
+
+
+def is_live_data(data: dict, now: float) -> bool:
+    """这份状态文件代表的会话是否活跃（specs/state.md §1.2）。
+
+    按 ts + 状态 TTL 判断，不用 mtime；缺 ts/坏 ts/ts 未来偏移超过 5 分钟视为不活跃。
+    """
+    ts = data.get('ts')
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)):
+        return False
+    if ts - now > models.FUTURE_TS_TOLERANCE:
+        return False
+    return now - ts <= models.STATE_TTL[canonical_state(data.get('state'))]
 
 
 def remove_quietly(path) -> bool:

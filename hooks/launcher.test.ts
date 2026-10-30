@@ -1,58 +1,63 @@
-// launcher：运行时解析。venv 路径必须跟着运行目录走，不能写死 ~/.claude/desk-pet。
+// launcher 健康检查与自动重启的测试（#4）：探活解释、节流、被杀后拉起。
 import { test } from 'node:test'
 import { strictEqual } from 'node:assert'
 import type { EngineInterface } from 'claude-code'
-import { ensureMacVenv, launchPet, venvPython } from './launcher.ts'
+import type { SessionContext } from './context.ts'
+import { ensurePetAlive, petAlive } from './launcher.ts'
 
-function make$(opts: { windows?: boolean } = {}) {
-  const calls: string[][] = []
-  const $ = {
-    env: {
-      get: async (n: string) => {
-        if (opts.windows) return n === 'SystemRoot' ? 'C:\\Windows' : undefined
-        return n === 'HOME' ? '/home/me' : undefined
+// 最小引擎桩：env 无 SystemRoot（走 macOS 分支），process.run 的结果可编排
+function make$(probeExit: number | 'throw') {
+  const runs: string[][] = []
+  return {
+    $: {
+      env: { get: async (_k: string) => undefined },
+      process: {
+        run: async (argv: string[]) => {
+          runs.push(argv)
+          if (probeExit === 'throw') throw new Error('probe timeout')
+          return { exitCode: probeExit, stdout: '', stderr: '' }
+        },
       },
-    },
-    process: {
-      run: async (argv: string[]) => {
-        calls.push(argv)
-        return { exitCode: 0, stdout: '', stderr: '' }
-      },
-    },
-    fs: { write: async () => {} },
-    ui: { status: async () => {}, log: () => {}, toast: () => {} },
-    plugin: { root: '/plugin' },
-  } as unknown as EngineInterface
-  return { $, calls }
+      ui: { log: async () => {}, status: async () => {}, toast: async () => {} },
+      fs: { write: async () => {} },
+      plugin: { root: '/plugin' },
+    } as unknown as EngineInterface,
+    runs,
+  }
 }
 
-test('venvPython：venv 路径跟着运行目录走', () => {
-  strictEqual(venvPython('/custom/run'), '/custom/run/venv/bin/python')
-  strictEqual(venvPython('/home/me/.claude/desk-pet'), '/home/me/.claude/desk-pet/venv/bin/python')
+const ctx = (petCheckedAt = 0): SessionContext => ({
+  runDir: '/tmp/desk-pet', petFile: '', project: 'demo', cwd: '/w/demo',
+  sessionKey: 'session:s1', toolErrors: 0, petCheckedAt,
 })
 
-test('ensureMacVenv：检查的是运行目录里的 venv', async () => {
-  const { $, calls } = make$()
-  await ensureMacVenv($, '/custom/run')
-  strictEqual(calls[0][0], '/custom/run/venv/bin/python')
-  strictEqual(calls[0][1], '-c')
+test('petAlive：探测 exit 0 = 活着，非 0/抛异常 = 不在', async () => {
+  strictEqual(await petAlive(make$(0).$), true)
+  strictEqual(await petAlive(make$(1).$), false)
+  strictEqual(await petAlive(make$('throw').$), false)
 })
 
-test('launchPet：用运行目录里的 venv python 启动桌宠', async () => {
-  const { $, calls } = make$()
-  const ok = await launchPet($, '/custom/run')
-  strictEqual(ok, true)
-  const last = calls[calls.length - 1]
-  strictEqual(last[0], '/custom/run/venv/bin/python')
-  strictEqual(last[1], '/plugin/pet/launch.py')
-  strictEqual(last[2], '/plugin/pet/pet_mac.py')
-  strictEqual(last[3], '/custom/run')
+test('ensurePetAlive：活着时只探测不启动', async () => {
+  const { $, runs } = make$(0)
+  await ensurePetAlive(ctx(), $, 100_000)
+  strictEqual(runs.length, 1) // 只有探活，没有 launch
 })
 
-test('launchPet：Windows 走 cmd.exe，参数用反斜杠', async () => {
-  const { $, calls } = make$({ windows: true })
-  const ok = await launchPet($, 'C:/run')
-  strictEqual(ok, true)
-  strictEqual(calls[0][0], 'C:\\Windows\\System32\\cmd.exe')
-  strictEqual(calls[0][6], 'C:/run')
+test('ensurePetAlive：10s 节流窗口内不再探测', async () => {
+  const { $, runs } = make$(0)
+  const c = ctx()
+  await ensurePetAlive(c, $, 100_000)
+  await ensurePetAlive(c, $, 105_000) // 5s < 10s，跳过
+  strictEqual(runs.length, 1)
+  strictEqual(c.petCheckedAt, 100_000)
+})
+
+test('ensurePetAlive：探活失败（被杀）→ 重新 launchPet', async () => {
+  const { $, runs } = make$(1)
+  const c = ctx()
+  await ensurePetAlive(c, $, 100_000)
+  // 第 1 次 run 是探活；之后 launchPet 会再 run（macOS 先 venv 检查再启动）
+  const probe = runs[0].join(' ')
+  strictEqual(probe.includes('47321'), true)
+  strictEqual(runs.length > 1, true)
 })

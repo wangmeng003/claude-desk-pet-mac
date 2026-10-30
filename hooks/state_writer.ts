@@ -4,6 +4,7 @@
 import type { EngineInterface } from 'claude-code'
 import type { SessionContext } from './context.ts'
 import type { PetState } from './state.ts'
+import { ensurePetAlive } from './launcher.ts'
 
 export async function pet(
   ctx: SessionContext,
@@ -30,5 +31,7 @@ export async function pet(
     if (opts.sound !== undefined) payload.sound = opts.sound
     if (opts.attention !== undefined) payload.attention = opts.attention
     await $.fs.write(ctx.petFile, JSON.stringify(payload))
+    // 探活放在写成功之后：被杀的桌宠由下一个事件自动拉起（#4），失败静默不影响 Claude
+    void ensurePetAlive(ctx, $, ts * 1000).catch(() => {})
   } catch {}
 }

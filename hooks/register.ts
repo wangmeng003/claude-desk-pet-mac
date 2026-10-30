@@ -73,7 +73,51 @@ async function pet($: EngineInterface, state: PetState, text: string, sound?: 'd
   } catch {}
 }
 
-async function launchPet($: EngineInterface) {
+const macHome = async ($: EngineInterface) =>
+  (((await $.env.get('HOME')) ?? '').replace(/\\/g, '/'))
+
+// macOS 的桌宠跑在插件自己的 venv 里；先确认 Pillow 和 pyobjc 都能导入
+async function macVenvReady($: EngineInterface, python: string) {
+  try {
+    const ran = await $.process.run([python, '-c', 'import PIL, objc'], { timeoutMs: 30_000 })
+    return ran.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+// 首次运行自动建 venv、装依赖；失败时在状态栏/通知栏留一句提示
+async function ensureMacVenv($: EngineInterface, force = false) {
+  if (!runDir) return false
+  const home = await macHome($)
+  const python = `${home}/.claude/desk-pet/venv/bin/python`
+  if (!force && (await macVenvReady($, python))) return true
+
+  await $.ui.status('🐾 第一次运行，正在准备桌宠环境（约 1 分钟）…')
+  try {
+    const argv = ['/usr/bin/env', 'python3', `${$.plugin.root}/pet/setup.py`, runDir]
+    if (force) argv.push('--force')
+    const ran = await $.process.run(argv, { timeoutMs: 600_000 })
+    if (ran.exitCode === 0 && (await macVenvReady($, python))) return true
+    if (ran.exitCode === 2) {
+      await $.ui.status('🐾 上次环境准备失败，运行 /pet setup 重试')
+      return false
+    }
+    await $.fs.write(
+      `${runDir}/mod-launch.log`,
+      `桌宠环境准备失败 exit=${ran.exitCode}\n${ran.stdout}\n${ran.stderr}`,
+    ).catch(() => {})
+    $.ui.log(`桌宠环境准备失败：exit=${ran.exitCode}\n${ran.stdout}\n${ran.stderr}`, { to: 'debug' })
+  } catch (err) {
+    $.ui.log(`桌宠环境准备失败：${String(err)}`, { to: 'debug' })
+  }
+  await $.ui.status('🐾 桌宠环境准备失败：运行 /pet setup 重试，或查看 ~/.claude/desk-pet/setup.log')
+  $.ui.toast('桌宠环境准备失败，运行 /pet setup 重试')
+  return false
+}
+
+async function launchPet($: EngineInterface): Promise<boolean> {
+  if (!runDir) return false
   try {
     let ran: { exitCode: number; stdout: string; stderr: string }
     if (await $.env.get('SystemRoot')) {
@@ -84,8 +128,9 @@ async function launchPet($: EngineInterface) {
         { timeoutMs: 15000 },
       )
     } else {
-      // macOS：桌宠跑在 ~/.claude/desk-pet/venv 里的 python（带 pyobjc/Pillow）
-      const home = ((await $.env.get('HOME')) ?? '').replace(/\\/g, '/')
+      // macOS：先准备 venv，再用 venv 里的 python 启动桌宠
+      if (!(await ensureMacVenv($))) return false
+      const home = await macHome($)
       ran = await $.process.run(
         [`${home}/.claude/desk-pet/venv/bin/python`, `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet_mac.py`, runDir],
         { timeoutMs: 15000 },
@@ -93,10 +138,13 @@ async function launchPet($: EngineInterface) {
     }
     if (ran.exitCode !== 0) {
       await $.fs.write(`${runDir}/mod-launch.log`, `exit=${ran.exitCode}\n${ran.stdout}\n${ran.stderr}`)
+      return false
     }
+    return true
   } catch (err) {
     $.ui.log(`桌宠启动失败：${String(err)}`, { to: 'debug' })
     await $.fs.write(`${runDir}/mod-launch.log`, `启动 python 失败：${String(err)}`).catch(() => {})
+    return false
   }
 }
 
@@ -185,7 +233,7 @@ export const register: Register = on => {
     }
 
     await $.command.register({ name: 'token-stats', description: '查看本会话和本项目累计的 token 用量、缓存命中率' })
-    await $.command.register({ name: 'pet', description: '重新召唤桌宠悬浮窗' })
+    await $.command.register({ name: 'pet', description: '重新召唤桌宠悬浮窗（macOS 可用 /pet setup 重新准备环境）' })
 
     await pet($, 'waiting', '我来啦～')
     void launchPet($)
@@ -251,7 +299,29 @@ export const register: Register = on => {
   on('command.run', { command: 'token-stats' }, async ($, e, next) => ({ text: await statsText($) }))
 
   on('command.run', { command: 'pet' }, async ($, e, next) => {
-    await launchPet($)
+    const args = typeof (e as { args?: unknown }).args === 'string'
+      ? (e as { args: string }).args.trim()
+      : ''
+
+    if (args === 'setup') {
+      if (await $.env.get('SystemRoot')) {
+        return { text: 'Windows 不需要额外准备环境，直接 /pet 就能召唤桌宠。' }
+      }
+      if (!(await ensureMacVenv($, true))) {
+        return { text: '环境准备失败。详情见 ~/.claude/desk-pet/setup.log；也可以按 README 手动创建 venv。' }
+      }
+      if (!(await launchPet($))) {
+        return { text: '环境已就绪，但桌宠启动失败。详情见 ~/.claude/desk-pet/mod-launch.log。' }
+      }
+      await pet($, 'waiting', '我在这儿～')
+      return { text: '桌宠环境已就绪，桌宠已召唤。' }
+    }
+
+    if (!(await launchPet($))) {
+      return {
+        text: '桌宠没起来。macOS 第一次运行需要准备环境，运行 /pet setup 重试；详情见 ~/.claude/desk-pet/setup.log。',
+      }
+    }
     await pet($, 'waiting', '我在这儿～')
     return { text: '桌宠已召唤（如果它本来就开着，就不会再开第二个）。' }
   })

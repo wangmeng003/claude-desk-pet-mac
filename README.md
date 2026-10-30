@@ -34,6 +34,7 @@
 
 - `/token-stats`：查看本会话和本项目累计的 token 用量、缓存命中率、额度
 - `/pet`：不小心关掉了桌宠？用它重新召唤
+- `/pet setup`：macOS 上重新准备运行环境（首次安装失败时用）
 
 ## 运行要求
 
@@ -50,13 +51,17 @@ pip install pillow
 **macOS**
 
 - **macOS 11+**，用原生 `NSWindow`（pyobjc）实现悬浮窗
-- **Python 3**，并且在命令行里输入 `python` 能直接运行
-- **Pillow + pyobjc**，装到插件自己的虚拟环境里（插件会自动准备）：
+- **Python 3**：`python3 --version` 能运行（没有的话先安装 Xcode Command Line Tools）
+- **Pillow + pyobjc**：第一次启动时插件会自动在 `~/.claude/desk-pet/venv` 建虚拟环境并安装，需要联网，大约 1 分钟
+
+自动安装失败时，也可以手动准备：
 
 ```bash
 python3 -m venv ~/.claude/desk-pet/venv
-~/.claude/desk-pet/venv/bin/pip install pillow pyobjc-framework-Cocoa
+~/.claude/desk-pet/venv/bin/pip install --only-binary :all: pillow 'pyobjc-framework-Cocoa==11.1'
 ```
+
+（Python 3.10+ 也可以装最新版 `pyobjc-framework-Cocoa`；上面的 11.1 同时支持 3.9 和更新版本。）
 
 桌宠会自动按平台分派：Windows 走 `pet/pet.pyw`，macOS 走 `pet/pet_mac.py`。
 
@@ -78,7 +83,17 @@ claude plugin install desk-pet --marketplace wangmeng003/claude-desk-pet-mac
 
 **在 Claude 桌面端**：点输入框旁边的 **+** → **Plugins** → **Add marketplace**，填入 `wangmeng003/claude-desk-pet-mac`，再点 **Add plugin**。
 
-装好后，新开一个会话，桌宠就会出现在屏幕右下角。
+装好后，新开一个会话，桌宠就会出现在屏幕右下角。macOS 第一次运行会自动准备 Python 环境，可能需要约 1 分钟；如果桌宠没出现，运行 `/pet setup` 重试，或查看 `~/.claude/desk-pet/setup.log`。
+
+## 桌宠没出现？
+
+1. macOS 上先运行 `/pet setup`，看依赖是否能装好。
+2. 查看日志：
+   - `~/.claude/desk-pet/setup.log`：环境安装日志
+   - `~/.claude/desk-pet/mod-launch.log`：启动失败时的错误
+   - `~/.claude/desk-pet/pet-error.log`：桌宠自己崩溃时的堆栈
+3. 确认 `python3 --version` 能运行、网络能访问 PyPI；公司网络有限制时，按上面的手动命令装依赖。
+4. Windows 上确认 `python` 命令可用，并且已经 `pip install pillow`。
 
 ## 自定义
 
@@ -100,6 +115,7 @@ claude plugin install desk-pet --marketplace wangmeng003/claude-desk-pet-mac
 由 **wangmeng003** 维护，补充了：
 
 - **macOS 支持**：新增 `pet/pet_mac.py`（原生 `NSWindow` 悬浮窗 + pyobjc），`pet/launch.py` 与 `hooks/register.ts` 按平台分派启动
+- **首次运行自动准备环境**：macOS 下自动创建 venv 并安装 Pillow/pyobjc，失败时可用 `/pet setup` 重试
 - **立绘变形修复**：每张立绘保持自己的宽高比
 - **兼容性修复**：去掉 `plugin.json` 的 `types` 字段，避免旧版 Claude Code 同步市场时跳过整个插件
 

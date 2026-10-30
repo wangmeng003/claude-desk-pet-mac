@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- M1 #5：单实例锁 = 端口互斥 + 锁文件（pid/port/ts）+ 明确提示：
+  - 端口 bind 是唯一互斥量；`<运行目录>/pet.lock` 只记录 pid/port 供提示与诊断，
+    崩溃残留（PID 已死）下次启动自动识别清理
+  - 双开不再静默退出：已有桌宠在跑时提示「PID xxx，不再开第二只」；端口被其他程序占用时
+    说清端口号与改法（`PET_PORT` 环境变量换端口，hooks 探活同步读取同一值）
+  - 修复 #4 遗留：单实例端口此前只 bind 不 listen，探活 connect 恒被拒 → 活着的桌宠
+    被当死的、每 10s 拉起循环；现在 listen + 后台 accept，探活真实可用（含回归测试）
+  - 修复 TIME_WAIT 重绑：探活连接由服务端先关，端口留 ~30s TIME_WAIT，桌宠退出后
+    立刻重启恒失败；`bind` 前设 `SO_REUSEADDR`（Windows 默认允许重绑，不动）
+  - hooks 自动拉起传 `--quiet`：单实例冲突只写 `pet-error.log` 不弹对话框
+    （否则端口被占时每 10s 弹一次）；`--shot` 不再参与抢锁
 - M1 #4：生命周期 = 活跃会话 + 状态 TTL（协议 §1.2），替代 pgrep/tasklist：core 新增 `STATE_TTL`/`is_live_data`/`has_live_session`；双端 `watch_lifecycle` 无活跃会话超 120s 才退出，Windows 终端找不到 claude.exe 误退根治；hooks 新增 `petAlive` 端口探活 + 10s 节流，桌宠被杀后下一个 Claude 事件自动拉起
 - M1 #10：状态协议 v1 落地（specs/state.md）——8 事件映射 + schema 对齐 + 契约测试：
   - hooks 写入方按协议 §4.1 全量映射：`session.start`→waiting(false)、`turn.start`→thinking、

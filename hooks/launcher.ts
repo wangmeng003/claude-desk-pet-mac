@@ -3,26 +3,33 @@ import type { EngineInterface } from 'claude-code'
 import type { SessionContext } from './context.ts'
 
 // 单实例端口（pet 的 acquire_lock 绑在 127.0.0.1 这个端口上）：能连上 = 桌宠活着。
-const PET_PORT = 47321
+// 用户可用 PET_PORT 环境变量换端口（#5），探活要跟着读同一个值。
+const PET_PORT_DEFAULT = 47321
 const PROBE_INTERVAL_MS = 10_000
+
+async function petPort($: EngineInterface): Promise<number> {
+  const raw = Number(await $.env.get('PET_PORT'))
+  return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : PET_PORT_DEFAULT
+}
 
 // 探活脚本：纯标准库 socket 连一下单实例端口；连不上 exit 1。
 // 引擎没有 socket API，借用目标平台的 python 跑这一行（macOS 用系统 python3，Windows 走 PATH）。
-const PROBE = [
+const probeScript = (port: number) => [
   'import socket,sys',
   's=socket.socket()',
   's.settimeout(0.5)',
   'try:',
-  " s.connect(('127.0.0.1',47321))",
+  ` s.connect(('127.0.0.1',${port}))`,
   'except OSError:',
   ' sys.exit(1)',
 ].join('\n')
 
 async function probeArgv($: EngineInterface): Promise<string[]> {
+  const script = probeScript(await petPort($))
   if (await $.env.get('SystemRoot')) {
-    return ['C:\\Windows\\System32\\cmd.exe', '/d', '/c', 'python', '-c', PROBE]
+    return ['C:\\Windows\\System32\\cmd.exe', '/d', '/c', 'python', '-c', script]
   }
-  return ['/usr/bin/env', 'python3', '-c', PROBE]
+  return ['/usr/bin/env', 'python3', '-c', script]
 }
 
 // 健康检查：连得上单实例端口说明桌宠在跑；任何异常（端口拒绝/超时/没有 python）都视为不在。
@@ -97,14 +104,14 @@ export async function launchPet($: EngineInterface, runDir: string): Promise<boo
       // Windows：引擎不按 PATH 找程序，交给 cmd.exe 去找 python
       // （cmd.exe 的路径必须用反斜杠，用正斜杠时 cmd 会把 /Windows 当成开关）
       ran = await $.process.run(
-        ['C:\\Windows\\System32\\cmd.exe','/d', '/c', 'python', `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet.pyw`, runDir],
+        ['C:\\Windows\\System32\\cmd.exe','/d', '/c', 'python', `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet.pyw`, runDir, '--quiet'],
         { timeoutMs: 15000 },
       )
     } else {
       // macOS：先准备 venv，再用 venv 里的 python 启动桌宠
       if (!(await ensureMacVenv($, runDir))) return false
       ran = await $.process.run(
-        [venvPython(runDir), `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet_mac.py`, runDir],
+        [venvPython(runDir), `${$.plugin.root}/pet/launch.py`, `${$.plugin.root}/pet/pet_mac.py`, runDir, '--quiet'],
         { timeoutMs: 15000 },
       )
     }

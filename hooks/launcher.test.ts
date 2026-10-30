@@ -3,14 +3,19 @@ import { test } from 'node:test'
 import { strictEqual } from 'node:assert'
 import type { EngineInterface } from 'claude-code'
 import type { SessionContext } from './context.ts'
-import { ensurePetAlive, petAlive } from './launcher.ts'
+import { ensurePetAlive, launchPet, petAlive } from './launcher.ts'
 
 // 最小引擎桩：env 无 SystemRoot（走 macOS 分支），process.run 的结果可编排
 function make$(probeExit: number | 'throw') {
+  return makeEnv$({}, probeExit)
+}
+
+// 可指定环境变量的引擎桩（PET_PORT / SystemRoot，#5）
+function makeEnv$(env: Record<string, string>, probeExit: number | 'throw') {
   const runs: string[][] = []
   return {
     $: {
-      env: { get: async (_k: string) => undefined },
+      env: { get: async (k: string) => env[k] },
       process: {
         run: async (argv: string[]) => {
           runs.push(argv)
@@ -60,4 +65,27 @@ test('ensurePetAlive：探活失败（被杀）→ 重新 launchPet', async () =
   const probe = runs[0].join(' ')
   strictEqual(probe.includes('47321'), true)
   strictEqual(runs.length > 1, true)
+})
+
+test('petAlive：PET_PORT 环境变量换探活端口（#5）', async () => {
+  const { $, runs } = makeEnv$({ PET_PORT: '47400' }, 0)
+  strictEqual(await petAlive($), true)
+  const probe = runs[0].join(' ')
+  strictEqual(probe.includes('47400'), true)
+  strictEqual(probe.includes('47321'), false)
+})
+
+test('petAlive：PET_PORT 是垃圾值时用默认端口', async () => {
+  const { $, runs } = makeEnv$({ PET_PORT: 'not-a-port' }, 0)
+  await petAlive($)
+  strictEqual(runs[0].join(' ').includes('47321'), true)
+})
+
+test('launchPet：自动拉起带 --quiet（单实例冲突只写日志，不弹对话框）', async () => {
+  // Windows 分支：不触发 macOS 的 venv 检查，launch.py 一次 run 走完
+  const { $, runs } = makeEnv$({ SystemRoot: 'C:\\Windows' }, 0)
+  strictEqual(await launchPet($, '/run'), true)
+  const launch = runs[0].join(' ')
+  strictEqual(launch.includes('launch.py'), true)
+  strictEqual(launch.includes('--quiet'), true)
 })

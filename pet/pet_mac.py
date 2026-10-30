@@ -2,8 +2,9 @@
 # 本文件是 composition root：组装 settings / core / platform，平台细节都在 platform/mac/。
 # 状态文件、设置文件和 Windows 版 pet.pyw 保持同一套约定。
 # 用法：python pet_mac.py <运行目录>
+import atexit
 import os
-import socket
+import subprocess
 import sys
 import time
 
@@ -12,6 +13,7 @@ from Foundation import NSTimer
 
 from core import cli_args
 from core import errors as core_errors
+from core import lock
 from core import sessions as core_sessions
 from core import state_reader as core_state_reader
 from core import view_model as core_view_model
@@ -27,19 +29,38 @@ SOUNDS = os.path.join(os.path.dirname(HERE), 'sounds')
 RUN_DIR, SHOT_PATH = cli_args.parse_args(sys.argv[1:], cli_args.default_run_dir())
 SESSIONS = os.path.join(RUN_DIR, 'sessions')
 SETTINGS = os.path.join(RUN_DIR, 'settings.json')
+QUIET = '--quiet' in sys.argv[1:]  # 被 hooks 自动拉起：单实例冲突只写日志，不弹对话框
 
 # 只允许开一个桌宠：占住一个本地端口，占不到说明已经有一个在跑
 # （在 acquire_lock() 里做，保持 import 本模块无副作用，测试才能导入）
 _lock = None
 
 
-def acquire_lock():
-    global _lock
+def report_and_exit(msg, code, quiet):
+    """单实例冲突的明确提示（#5）：写 pet-error.log；手动启动再弹对话框。"""
     try:
-        _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        _lock.bind(('127.0.0.1', 47321))
+        with open(os.path.join(RUN_DIR, 'pet-error.log'), 'a', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} 单实例锁：{msg}\n')
     except OSError:
-        sys.exit(0)
+        pass
+    if not quiet:
+        subprocess.run(['/usr/bin/osascript', '-e',
+                        f'display dialog "{msg}" buttons {{"好"}} default button 1 with icon caution'])
+    sys.exit(code)
+
+
+def acquire_lock(quiet):
+    global _lock
+    kind, info = lock.acquire(RUN_DIR, lock.port_from_env())
+    if kind == 'acquired':
+        _lock = info  # 一直持有：GC/关闭都会放开端口，第二只桌宠就能进来
+        atexit.register(lock.remove_lock, lock.lock_path(RUN_DIR))
+    elif kind == 'another-pet':
+        report_and_exit(f'已经有一只桌宠在跑啦（PID {info["pid"]}），就不再开第二只。', 0, quiet)
+    else:
+        report_and_exit(
+            f'端口 {info["port"]} 被其他程序占用，桌宠起不来。'
+            f'设置环境变量 PET_PORT 换一个端口（例如 47400）再启动。', 1, quiet)
 
 
 def load_settings():
@@ -185,7 +206,8 @@ def shoot(pet, path):
 
 
 def main():
-    acquire_lock()
+    if SHOT_PATH is None:  # --shot 是诊断/测试路径，不参与抢锁
+        acquire_lock(QUIET)
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)  # 不占 Dock
     pet = Pet()

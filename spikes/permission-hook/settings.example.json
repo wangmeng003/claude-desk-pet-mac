@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "<repo>/spikes/permission-hook/hook.sh", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}

@@ -81,11 +81,17 @@ def make_pet():
     pet.refresh = lambda: None  # 实例属性盖掉方法，渲染不执行
     if pet_win is not None and petmod is pet_win:
         pet.canvas = _CanvasStub(pet)
+        pet.root = _RootStub()  # Windows 版 poll() 末尾用 root.after 调度下一帧
         pet.draw_bubble = lambda: None
         pet.sound_var = _VarStub(True)
         pet.images = {name: _ImageStub(name) for name in petmod.SPRITES}
         pet.sprite = 1
     return pet
+
+
+class _RootStub:
+    def after(self, _ms, _cb):
+        return None
 
 
 class _CanvasStub:

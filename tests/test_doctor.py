@@ -100,11 +100,13 @@ def test_ansi_codepage_stdout_does_not_crash(tmp_path):
 def test_home_paths_are_redacted(tmp_path, monkeypatch):
     fake_home = tmp_path / 'home'
     fake_home.mkdir()
-    monkeypatch.setenv('HOME', str(fake_home))  # doctor 的 redact 用 expanduser('~')
+    # doctor 的 redact 用 expanduser('~')：POSIX 读 HOME，Windows 读 USERPROFILE，两个都换
+    monkeypatch.setenv('HOME', str(fake_home))
+    monkeypatch.setenv('USERPROFILE', str(fake_home))
     sessions = fake_home / '.claude' / 'desk-pet' / 'sessions'
     sessions.mkdir(parents=True)
     (sessions / 's9.json').write_text('{"state": "idle"}', encoding='utf-8')
-    env = dict(os.environ, HOME=str(fake_home))
+    env = dict(os.environ, HOME=str(fake_home), USERPROFILE=str(fake_home))
     r = subprocess.run(
         [sys.executable, str(DOCTOR), str(sessions.parent), str(REPO), PORT],
         capture_output=True, encoding='utf-8', timeout=90, env=env)

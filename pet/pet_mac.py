@@ -12,7 +12,6 @@ import subprocess
 import sys
 import time
 
-import objc
 from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory, NSBezierPath,
                     NSColor, NSCompositingOperationSourceOver, NSFont, NSFontAttributeName,
                     NSForegroundColorAttributeName, NSGraphicsContext, NSImage,
@@ -29,11 +28,17 @@ SESSIONS = os.path.join(RUN_DIR, 'sessions')
 SETTINGS = os.path.join(RUN_DIR, 'settings.json')
 
 # 只允许开一个桌宠：占住一个本地端口，占不到说明已经有一个在跑
-try:
-    _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    _lock.bind(('127.0.0.1', 47321))
-except OSError:
-    sys.exit(0)
+# （在 acquire_lock() 里做，保持 import 本模块无副作用，测试才能导入）
+_lock = None
+
+
+def acquire_lock():
+    global _lock
+    try:
+        _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _lock.bind(('127.0.0.1', 47321))
+    except OSError:
+        sys.exit(0)
 
 # 状态 → 立绘（与 Windows 版一致）
 SPRITES = {
@@ -467,6 +472,7 @@ def shoot(pet, path):
 
 
 def main():
+    acquire_lock()
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)  # 不占 Dock
     pet = Pet()

@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: pytest · ruff · mypy（${{ matrix.os }}）
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest ruff mypy pillow
+      - name: 安装 pyobjc（仅 macOS）
+        if: runner.os == 'macOS'
+        run: pip install pyobjc-framework-Cocoa
+      - name: ruff
+        run: ruff check pet/ tests/
+      - name: mypy（增量，先绿后严）
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            mypy pet/pet_mac.py pet/launch.py pet/setup.py
+          else
+            mypy pet/pet.pyw pet/launch.py pet/setup.py
+          fi
+      - name: pytest（= 平台冒烟：导入被测模块即覆盖平台依赖）
+        run: python -m pytest -v
+
+  ts:
+    name: tsc --noEmit（hooks）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 类型检查 hooks/
+        run: npm exec --yes --package=typescript@5.6 -- tsc -p hooks

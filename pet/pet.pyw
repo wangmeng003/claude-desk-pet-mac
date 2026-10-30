@@ -23,11 +23,17 @@ SESSIONS = os.path.join(RUN_DIR, 'sessions')
 SETTINGS = os.path.join(RUN_DIR, 'settings.json')
 
 # 只允许开一个桌宠：占住一个本地端口，占不到说明已经有一个在跑
-try:
-    _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    _lock.bind(('127.0.0.1', 47321))
-except OSError:
-    sys.exit(0)
+# （在 acquire_lock() 里做，保持 import 本模块无副作用，测试才能导入）
+_lock = None
+
+
+def acquire_lock():
+    global _lock
+    try:
+        _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _lock.bind(('127.0.0.1', 47321))
+    except OSError:
+        sys.exit(0)
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -365,6 +371,7 @@ class Pet:
 
 
 if __name__ == '__main__':
+    acquire_lock()
     try:
         Pet().root.mainloop()
     except Exception:

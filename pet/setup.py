@@ -45,8 +45,8 @@ def run(argv, timeout):
     except subprocess.TimeoutExpired:
         log(f'超时（{timeout}s）')
         return 1
-    except OSError as err:
-        log(f'无法执行：{err}')
+    except OSError as os_err:
+        log(f'无法执行：{os_err}')
         return 1
     out = (proc.stdout or '').strip()
     err = (proc.stderr or '').strip()

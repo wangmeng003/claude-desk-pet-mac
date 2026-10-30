@@ -37,6 +37,8 @@
 
 ## 运行要求
 
+**Windows**
+
 - **Windows**（悬浮窗和提示音用的是 Windows 的接口）
 - **Python 3**，并且在命令行里输入 `python` 能直接运行
 - **Pillow** 图像库，用下面这条命令安装：
@@ -45,12 +47,25 @@
 pip install pillow
 ```
 
+**macOS**
+
+- **macOS 11+**，用原生 `NSWindow`（pyobjc）实现悬浮窗
+- **Python 3**，并且在命令行里输入 `python` 能直接运行
+- **Pillow + pyobjc**，装到插件自己的虚拟环境里（插件会自动准备）：
+
+```bash
+python3 -m venv ~/.claude/desk-pet/venv
+~/.claude/desk-pet/venv/bin/pip install pillow pyobjc-framework-Cocoa
+```
+
+桌宠会自动按平台分派：Windows 走 `pet/pet.pyw`，macOS 走 `pet/pet_mac.py`。
+
 ## 安装
 
 **在终端里的 Claude Code**，输入：
 
 ```
-/plugin install desk-pet --marketplace BingXing-ai/claude-desk-pet
+/plugin install desk-pet --marketplace wangmeng003/claude-desk-pet-mac
 ```
 
 然后按 `y` 添加插件市场，选择 user（用户）范围，按回车确认。
@@ -58,10 +73,10 @@ pip install pillow
 **也可以在命令行里运行：**
 
 ```bash
-claude plugin install desk-pet --marketplace BingXing-ai/claude-desk-pet
+claude plugin install desk-pet --marketplace wangmeng003/claude-desk-pet-mac
 ```
 
-**在 Claude 桌面端**：点输入框旁边的 **+** → **Plugins** → **Add marketplace**，填入 `BingXing-ai/claude-desk-pet`，再点 **Add plugin**。
+**在 Claude 桌面端**：点输入框旁边的 **+** → **Plugins** → **Add marketplace**，填入 `wangmeng003/claude-desk-pet-mac`，再点 **Add plugin**。
 
 装好后，新开一个会话，桌宠就会出现在屏幕右下角。
 
@@ -78,3 +93,21 @@ claude plugin install desk-pet --marketplace BingXing-ai/claude-desk-pet
 - 这是个人粉丝作品，与 Anthropic 官方无关
 - 立绘由作者用 AI 绘图生成，最初是为自己的视频做的素材
 - 代码使用 MIT 许可证，详见 [LICENSE](LICENSE)
+
+### 关于这个 fork
+
+本仓库 fork 自 [BingXing-ai/claude-desk-pet](https://github.com/BingXing-ai/claude-desk-pet)（原作者的 Windows 版），
+由 **wangmeng003** 维护，补充了：
+
+- **macOS 支持**：新增 `pet/pet_mac.py`（原生 `NSWindow` 悬浮窗 + pyobjc），`pet/launch.py` 与 `hooks/register.ts` 按平台分派启动
+- **立绘变形修复**：每张立绘保持自己的宽高比
+- **兼容性修复**：去掉 `plugin.json` 的 `types` 字段，避免旧版 Claude Code 同步市场时跳过整个插件
+
+上游更新可以随时同步：
+
+```bash
+git remote add upstream git@github.com:BingXing-ai/claude-desk-pet.git
+git fetch upstream && git merge upstream/main
+```
+
+原作者的版权声明保留在 [LICENSE](LICENSE) 中。

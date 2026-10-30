@@ -7,7 +7,7 @@ import type { SessionContext } from './context.ts'
 const PET_PORT_DEFAULT = 47321
 const PROBE_INTERVAL_MS = 10_000
 
-async function petPort($: EngineInterface): Promise<number> {
+export async function petPort($: EngineInterface): Promise<number> {
   const raw = Number(await $.env.get('PET_PORT'))
   return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : PET_PORT_DEFAULT
 }

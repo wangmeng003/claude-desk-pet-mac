@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- M1 #7：`/pet doctor` 自诊断——`pet/doctor.py` 一趟收集：平台/Python、插件版本、
+  运行目录可写性（不可写即短路）、状态目录（最新 3 个会话文件的 state 与年龄、坏文件标记）、
+  依赖（macOS venv 的 Pillow+pyobjc / Windows 的 Pillow+tkinter）、单实例（锁文件 PID 判活 +
+  端口探活）、日志（mtime + 错误日志末尾 2 行）；路径脱敏（HOME → ~），输出可直接粘贴到 issue；
+  有 `[err]` 时退出码 1。hooks 侧 `doctor.ts` 只负责跑脚本回显（引擎没有文件读取 API）
 - M1 #5：单实例锁 = 端口互斥 + 锁文件（pid/port/ts）+ 明确提示：
   - 端口 bind 是唯一互斥量；`<运行目录>/pet.lock` 只记录 pid/port 供提示与诊断，
     崩溃残留（PID 已死）下次启动自动识别清理

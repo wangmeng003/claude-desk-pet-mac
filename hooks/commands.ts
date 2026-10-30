@@ -1,9 +1,10 @@
-// commands：/pet、/pet setup、/token-stats 的用例。返回 { text } 给引擎回显。
+// commands：/pet、/pet setup、/pet doctor、/token-stats 的用例。返回 { text } 给引擎回显。
 import type { EngineInterface } from 'claude-code'
 import type { SessionContext } from './context.ts'
 import { statsText } from './statusline.ts'
 import { ensureMacVenv, launchPet } from './launcher.ts'
 import { pet } from './state_writer.ts'
+import { doctorText } from './doctor.ts'
 
 export async function tokenStats(ctx: SessionContext, $: EngineInterface) {
   return { text: await statsText(ctx, $) }
@@ -13,6 +14,10 @@ export async function petCommand(ctx: SessionContext, $: EngineInterface, e: unk
   const args = typeof (e as { args?: unknown }).args === 'string'
     ? (e as { args: string }).args.trim()
     : ''
+
+  if (args === 'doctor') {
+    return { text: await doctorText($, ctx.runDir) }
+  }
 
   if (args === 'setup') {
     if (await $.env.get('SystemRoot')) {

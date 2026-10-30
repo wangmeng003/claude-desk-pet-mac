@@ -18,8 +18,13 @@ export const register: Register = on => {
     ctx = await initContext($, e)
     await ensureSessionRecord(ctx, $)
 
-    await $.command.register({ name: 'token-stats', description: '查看本会话和本项目累计的 token 用量、缓存命中率' })
-    await $.command.register({ name: 'pet', description: '重新召唤桌宠悬浮窗（macOS 可用 /pet setup 重新准备环境）' })
+    // 命令注册失败（比如 mod 重载后重名）不能连带桌宠起不来
+    try {
+      await $.command.register({ name: 'token-stats', description: '查看本会话和本项目累计的 token 用量、缓存命中率' })
+      await $.command.register({ name: 'pet', description: '重新召唤桌宠悬浮窗（macOS 可用 /pet setup 重新准备环境）' })
+    } catch (err) {
+      $.ui.log(`命令注册失败：${String(err)}`, { to: 'debug' })
+    }
 
     await pet(ctx, $, 'waiting', '我来啦～')
     void launchPet($, ctx.runDir)
@@ -36,23 +41,34 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
+    // 桌宠这边的错误绝不能拦住工具，也不能在工具已经放行之后再抛：
+    // 一旦在 next(e) 之后抛错，兜底的 catch 会再跑一次 next(e)，
+    // 等于把工具（比如 Bash 命令）执行两遍。
     const isMain = e.agentId === undefined
     if (isMain && ctx) {
-      const input = e as unknown as Record<string, unknown>
-      await pet(ctx, $, READING.has(e.tool) ? 'reading' : 'tool', describe(e.tool, input))
+      try {
+        const input = e as unknown as Record<string, unknown>
+        await pet(ctx, $, READING.has(e.tool) ? 'reading' : 'tool', describe(e.tool, input))
+      } catch (err) {
+        $.ui.log(`桌宠状态更新失败：${String(err)}`, { to: 'debug' })
+      }
     }
 
     const ran = await next(e)
 
     if (isMain && ctx) {
-      if (ran.deny === undefined && ran.isError === true) {
-        ctx.toolErrors += 1
-        // 连续出错 3 次：石化彩蛋
-        if (ctx.toolErrors >= 3) await pet(ctx, $, 'stone', '石化了…')
-        else await pet(ctx, $, 'error', '出错了…')
-      } else {
-        ctx.toolErrors = 0
-        await pet(ctx, $, 'thinking', '思考中')
+      try {
+        if (ran.deny === undefined && ran.isError === true) {
+          ctx.toolErrors += 1
+          // 连续出错 3 次：石化彩蛋
+          if (ctx.toolErrors >= 3) await pet(ctx, $, 'stone', '石化了…')
+          else await pet(ctx, $, 'error', '出错了…')
+        } else {
+          ctx.toolErrors = 0
+          await pet(ctx, $, 'thinking', '思考中')
+        }
+      } catch (err) {
+        $.ui.log(`桌宠状态更新失败：${String(err)}`, { to: 'debug' })
       }
     }
     return ran

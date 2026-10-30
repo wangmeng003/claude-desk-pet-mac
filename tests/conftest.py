@@ -92,6 +92,7 @@ def make_pet():
         pet.draw_bubble = lambda: None
         pet.sound_var = _VarStub(True)
         pet.images = {name: _ImageStub(name) for name in petmod.SPRITES}
+        pet.fallback_image = None
         pet.sprite = 1
     return pet
 

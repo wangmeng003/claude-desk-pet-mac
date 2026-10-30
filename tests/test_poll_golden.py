@@ -1,6 +1,8 @@
 """poll() 的状态映射与提示音门控锁定 —— sessions → view model 的核心行为。"""
 import time
 
+import pytest
+
 from conftest import _VarStub, make_pet, pet_mac, pet_win, requires_platform, write_session
 
 
@@ -96,3 +98,41 @@ class TestSoundGating:
         write_session(sessions, 's1', {'state': 'error', 'text': '错', 'sound': 'hacked'}, age=1)
         pet.poll()
         assert plays == []
+
+
+@requires_platform
+class TestPollResilience:
+    """poll 里出异常不能让轮询停摆，也不能把异常抛给调用方。"""
+
+    def _boom(self, monkeypatch, petmod):
+        def boom():
+            raise RuntimeError('坏数据')
+        monkeypatch.setattr(petmod.Pet, 'poll_once', boom)
+
+    def test_poll_does_not_raise(self, pet_state, monkeypatch):
+        petmod, _tmp, _sessions = pet_state
+        pet = make_pet()
+        self._boom(monkeypatch, petmod)
+        pet.poll()  # 不能抛
+
+    @pytest.mark.skipif(pet_win is None, reason='Windows 版 poll 用 root.after 续帧')
+    def test_windows_poll_still_schedules_next_frame(self, pet_state, monkeypatch):
+        """Windows：root.after 在最后，出错不续帧就永远停在旧表情。"""
+        petmod, _tmp, _sessions = pet_state
+        pet = make_pet()
+        scheduled = []
+        pet.root.after = lambda ms, cb: scheduled.append(cb)
+        self._boom(monkeypatch, petmod)
+        pet.poll()
+        assert scheduled, 'poll 出错后没有排下一帧'
+
+    @pytest.mark.skipif(pet_mac is None, reason='mac 版 poll 靠 refresh 刷新画面')
+    def test_mac_poll_still_refreshes_after_error(self, pet_state, monkeypatch):
+        """macOS：出错这一帧也要刷新，别把画面冻住。"""
+        petmod, _tmp, _sessions = pet_state
+        pet = make_pet()
+        refreshed = []
+        pet.refresh = lambda: refreshed.append(1)
+        self._boom(monkeypatch, petmod)
+        pet.poll()
+        assert refreshed, 'poll 出错后没有刷新画面'

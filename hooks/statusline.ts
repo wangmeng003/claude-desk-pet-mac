@@ -20,10 +20,10 @@ export async function refreshStatus(ctx: SessionContext, $: EngineInterface) {
     `缓存命中 ${hitRate(t)}`,
   ]
   if (usage.cost) parts.push(`$${usage.cost.usd.toFixed(2)}`)
-  if (usage.context.percent !== undefined) parts.push(`上下文 ${usage.context.percent}%`)
-  const fiveHour = usage.rateLimits.find(r => r.kind === 'five_hour')
+  if (usage.context?.percent !== undefined) parts.push(`上下文 ${usage.context.percent}%`)
+  const fiveHour = (usage.rateLimits ?? []).find(r => r.kind === 'five_hour')
   if (fiveHour) parts.push(`5h额度 ${fiveHour.percentUsed}%`)
-  $.ui.status(parts.join(' · '))
+  await $.ui.status(parts.join(' · '))
 }
 
 export async function statsText(ctx: SessionContext, $: EngineInterface) {
@@ -35,7 +35,7 @@ export async function statsText(ctx: SessionContext, $: EngineInterface) {
   const rows = [
     line('本会话', t) + (usage.cost ? ` · $${usage.cost.usd.toFixed(2)}` : ''),
     p ? line(`本项目（${ctx.project}，${p.sessions} 个会话）`, p) + ` · $${p.costUsd.toFixed(2)}` : '本项目：还没有记录',
-    ...usage.rateLimits.map(r =>
+    ...(usage.rateLimits ?? []).map(r =>
       `额度 ${r.kind === 'five_hour' ? '5 小时' : r.kind === 'seven_day' ? '7 天' : r.kind}：已用 ${r.percentUsed}%` +
       (r.resetsAt ? `，${new Date(r.resetsAt).toLocaleString('zh-CN', { hour12: false })} 重置` : ''),
     ),

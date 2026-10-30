@@ -75,3 +75,19 @@ test('account：usage 缺失时四类记 0、lastCost 仍刷新', async () => {
   strictEqual(s.totals.input, 5)
   strictEqual(s.lastCost, 2)
 })
+
+test('ensureSessionRecord：新项目也要建出项目记录（会话数从 1 开始）', async () => {
+  const $ = make$()
+  await ensureSessionRecord(ctx(), $)
+  const p = (await $.store.get('project:/w/demo')) as { sessions: number; costUsd: number }
+  strictEqual(p.sessions, 1)
+  strictEqual(p.costUsd, 0)
+})
+
+test('ensureSessionRecord：老记录里没有 sessions 字段时不要变 NaN', async () => {
+  const $ = make$()
+  await $.store.set('project:/w/demo', { input: 1, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 2 })
+  await ensureSessionRecord(ctx(), $)
+  const p = (await $.store.get('project:/w/demo')) as { sessions: number }
+  strictEqual(p.sessions, 1)
+})

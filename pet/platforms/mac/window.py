@@ -12,6 +12,7 @@ from AppKit import (NSBezierPath, NSColor, NSCompositingOperationSourceOver, NSF
                     NSWindowCollectionBehaviorFullScreenAuxiliary)
 from Foundation import NSAttributedString, NSMakePoint, NSMakeRect
 
+from core import errors as core_errors
 from core.models import SIZES, SPRITES
 from core.state_reader import number as _number
 
@@ -31,10 +32,9 @@ class PetView(NSView):
         try:
             self.draw_content(rect)
         except Exception:
-            # AppKit 会对 drawRect 里抛出的异常直接杀进程，先记下来
-            import traceback
-            with open(os.path.join(self.ctl.run_dir, 'pet-error.log'), 'a', encoding='utf-8') as f:
-                traceback.print_exc(file=f)
+            # AppKit 会对 drawRect 里抛出的异常直接杀进程，先记下来。
+            # 记日志本身也不能抛：运行目录不可写时会把整个进程带走。
+            core_errors.log_exception(self.ctl.run_dir)
 
     def draw_content(self, rect):
         pet, ctl = self.pet, self.ctl

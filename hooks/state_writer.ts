@@ -13,7 +13,10 @@ export async function pet(
 ) {
   if (!ctx.petFile) return
   try {
-    const ts = await $.clock.now()
+    // ts 用 Unix 秒（状态协议 §2）；引擎给的时钟是毫秒，这里换算。
+    // 不换算的话以后按 ts 算 TTL 会把文件当成「未来时间戳」直接丢掉。
+    const raw = await $.clock.now()
+    const ts = raw > 1e11 ? raw / 1000 : raw
     await $.fs.write(ctx.petFile, JSON.stringify({ state, text, project: ctx.project, ts, sound }))
   } catch {}
 }

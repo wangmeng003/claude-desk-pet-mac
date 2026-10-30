@@ -13,7 +13,7 @@ if str(PET_DIR) not in sys.path:
     sys.path.insert(0, str(PET_DIR))
 
 from conftest import write_session  # noqa: E402
-from core import cli_args, models, sessions, state_reader, view_model  # noqa: E402
+from core import cli_args, errors, models, sessions, state_reader, view_model  # noqa: E402
 
 NOW = time.time()
 OLD = NOW - 700  # 超过 IDLE_AFTER（600s）
@@ -171,3 +171,32 @@ class TestCliArgs:
         run_dir, shot = cli_args.parse_args([], '/default')
         assert run_dir == '/default'
         assert shot is None
+
+
+class TestErrorLog:
+    """记异常本身不能抛：AppKit 会为 drawRect 里的异常杀进程。"""
+
+    def test_writes_traceback(self, tmp_path):
+        try:
+            raise RuntimeError('boom')
+        except RuntimeError:
+            assert errors.log_exception(str(tmp_path)) is True
+        text = (tmp_path / 'pet-error.log').read_text(encoding='utf-8')
+        assert 'RuntimeError: boom' in text
+
+    def test_creates_missing_run_dir(self, tmp_path):
+        target = tmp_path / 'nested' / 'run'
+        try:
+            raise RuntimeError('boom')
+        except RuntimeError:
+            assert errors.log_exception(str(target)) is True
+        assert (target / 'pet-error.log').is_file()
+
+    def test_unwritable_dir_does_not_raise(self, tmp_path):
+        # 路径指向一个已存在的文件：建目录会失败，但也不能把异常抛出去
+        blocker = tmp_path / 'blocker'
+        blocker.write_text('x', encoding='utf-8')
+        try:
+            raise RuntimeError('boom')
+        except RuntimeError:
+            errors.log_exception(str(blocker))  # 不能抛

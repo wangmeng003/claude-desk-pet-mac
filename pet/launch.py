@@ -4,6 +4,9 @@ import os
 import subprocess
 import sys
 
+if len(sys.argv) < 3:
+    sys.exit('用法：python launch.py <pet 脚本路径> <运行目录>')
+
 pet_script, run_dir = sys.argv[1], sys.argv[2]
 
 if sys.platform == 'darwin':

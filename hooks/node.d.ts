@@ -6,4 +6,6 @@ declare module 'node:test' {
 
 declare module 'node:assert' {
   export function strictEqual(actual: unknown, expected: unknown, message?: string): void
+  export function deepStrictEqual(actual: unknown, expected: unknown, message?: string): void
+  export function ok(value: unknown, message?: string): void
 }

@@ -11,6 +11,7 @@ from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 from Foundation import NSTimer
 
 from core import cli_args
+from core import errors as core_errors
 from core import sessions as core_sessions
 from core import state_reader as core_state_reader
 from core import view_model as core_view_model
@@ -122,6 +123,15 @@ class Pet:
         return core_view_model.effective_state(self.state, self.state_since, time.time())
 
     def poll(self):
+        # 坏状态文件不能冻住画面：出错了这一帧不画，下一帧继续
+        try:
+            self.poll_once()
+        except Exception:
+            core_errors.log_exception(RUN_DIR)
+        finally:
+            self.refresh()
+
+    def poll_once(self):
         latest = read_latest()
         if latest and latest[0] != self.last_mtime:
             self.last_mtime_seen, self.last_mtime = self.last_mtime, latest[0]
@@ -134,7 +144,6 @@ class Pet:
                 play_sound(os.path.join(SOUNDS, mapped.sound + '.wav'))
             if changed:
                 self.hop_at = time.time()
-        self.refresh()
 
     def tick(self):
         # 33ms 动画帧 + “思考中”点点点
@@ -185,14 +194,7 @@ def main():
 
 def write_error_log():
     """把异常写进运行目录；目录不可写时至少别把原始异常吞掉。"""
-    import traceback
-    try:
-        os.makedirs(RUN_DIR, exist_ok=True)
-        with open(os.path.join(RUN_DIR, 'pet-error.log'), 'a', encoding='utf-8') as f:
-            f.write(traceback.format_exc())
-            f.write('\n')
-    except Exception:
-        traceback.print_exc()  # 兜底：至少打到 stderr
+    core_errors.log_exception(RUN_DIR)
 
 
 if __name__ == '__main__':

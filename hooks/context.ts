@@ -16,6 +16,11 @@ export async function initContext($: EngineInterface, e: { cwd: string }): Promi
   const home = ((await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '').replace(/\\/g, '/')
   // 运行目录放在 ~/.claude/desk-pet，不放进 mod 文件夹（避免触发热重载）
   const runDir = `${home}/.claude/desk-pet`
+  if (!home) {
+    // HOME/USERPROFILE 都没有：路径会退到 '/.claude/desk-pet'（写不进去就静默失败）。
+    // 不用相对路径：那样会在用户的项目目录里凭空造出 .claude/desk-pet。
+    $.ui.log('桌宠：拿不到 HOME/USERPROFILE，状态文件可能写不进去', { to: 'debug' })
+  }
   const sessionId = await $.session.id()
   return {
     runDir,

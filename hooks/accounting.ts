@@ -28,17 +28,26 @@ export const EMPTY: Totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 
 const projectKey = (cwd: string) => `project:${cwd}`
 
 export async function readSession(ctx: SessionContext, $: EngineInterface): Promise<SessionRecord> {
-  return ((await $.store.get(ctx.sessionKey)) as SessionRecord | undefined)
-    ?? { totals: EMPTY, lastCost: 0 }
+  const rec = (await $.store.get(ctx.sessionKey)) as SessionRecord | undefined
+  // 拷贝一份：EMPTY 是模块级共享对象，直接返回引用的话谁改了它全局都被改
+  return rec ?? { totals: { ...EMPTY }, lastCost: 0 }
 }
 
 // 新会话在项目累计里记一次（sessionKey 已存在说明是重载 mod，不重复计数）
 export async function ensureSessionRecord(ctx: SessionContext, $: EngineInterface) {
   if ((await $.store.get(ctx.sessionKey)) !== undefined) return
-  await $.store.set(ctx.sessionKey, { totals: EMPTY, lastCost: 0 })
+  // 存副本：EMPTY 是模块级共享对象，直接存引用的话谁改了它全局都被改
+  await $.store.set(ctx.sessionKey, { totals: { ...EMPTY }, lastCost: 0 })
+  // 项目记录一定要建出来：新项目之前只在这里加 1，
+  // 记录建不出来的话这一轮没跑成 account，项目会话数就永远少算一个。
   const key = projectKey(ctx.cwd)
   const p = (await $.store.get(key)) as ProjectTotals | undefined
-  if (p) await $.store.set(key, { ...p, sessions: p.sessions + 1 })
+  await $.store.set(key, {
+    ...EMPTY,
+    ...p,
+    costUsd: p?.costUsd ?? 0,
+    sessions: (p?.sessions ?? 0) + 1,
+  })
 }
 
 // 把本轮用量记进会话累计和项目累计（项目累计跨会话保存）
@@ -61,7 +70,7 @@ export async function account(ctx: SessionContext, $: EngineInterface, u: Usage 
   await $.store.set(ctx.sessionKey, record)
 
   const p = ((await $.store.get(projectKey(ctx.cwd))) as ProjectTotals | undefined)
-    ?? { ...EMPTY, costUsd: 0, sessions: 1 }
+    ?? { ...EMPTY, costUsd: 0, sessions: 0 }
   await $.store.set(projectKey(ctx.cwd), {
     input: p.input + add.input,
     output: p.output + add.output,

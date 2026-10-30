@@ -91,11 +91,11 @@ Optional / Explore
 | `pet/core/sessions.py` | 多会话、优先级、主会话选择 | UI、通知 | models |
 | `pet/core/view_model.py` | 主会话 → 气泡/菜单/动画状态 | 平台绘制 | models、sessions |
 | `pet/core/settings.py` | 默认值、迁移、校验 | UI 菜单 | models、fs |
-| `pet/platform/mac/window.py` | NSWindow/NSView、绘制、拖拽 | 状态决策 | core view model |
-| `pet/platform/mac/menu.py` | 右键菜单 | 业务逻辑 | core view model |
-| `pet/platform/mac/focus.py` | 前台检测、聚焦 Claude | 状态聚合 | 平台 API |
-| `pet/platform/mac/notify.py` | 通知、声音、Dock | 决策 | 平台 API |
-| `pet/platform/windows/*` | Tk 窗口/菜单/焦点/Toast | 同上 | core view model |
+| `pet/platforms/mac/window.py` | NSWindow/NSView、绘制、拖拽 | 状态决策 | core view model |
+| `pet/platforms/mac/menu.py` | 右键菜单 | 业务逻辑 | core view model |
+| `pet/platforms/mac/focus.py` | 前台检测、聚焦 Claude | 状态聚合 | 平台 API |
+| `pet/platforms/mac/notify.py` | 通知、声音、Dock | 决策 | 平台 API |
+| `pet/platforms/windows/*` | Tk 窗口/菜单/焦点/Toast | 同上 | core view model |
 | `pet/runtime/launcher.py` | 运行时解析、单实例、启动 | UI | core settings |
 | `pet/runtime/setup.py` | venv/依赖安装 | 状态、UI | stdlib |
 | `pet/features/theme.py` | 主题校验/加载 | 渲染细节、XP | core models |
@@ -163,8 +163,8 @@ tokens/model/context 留在插件 store，pet 不需要。多会话、XP、看�
 | 现状 | 问题 | 目标 |
 |---|---|---|
 | `hooks/register.ts`（328 行） | 状态、记账、venv、启动、命令、状态栏 6 个职责；模块级可变变量 | 拆成 `state` / `accounting` / `launcher` / `statusline` / `commands`；`register.ts` 组合根；每会话一个 context |
-| `pet/pet_mac.py`（490 行） | `PetView` 绘制 + `Pet` 窗口/菜单/设置/状态/焦点/生命周期 | `core/*` + `platform/mac/*`；`pet_mac.py` 只组装 |
-| `pet/pet.pyw`（373 行） | 同上，与 macOS 逻辑重复 | `core/*` 复用；`platform/windows/*` |
+| `pet/pet_mac.py`（490 行） | `PetView` 绘制 + `Pet` 窗口/菜单/设置/状态/焦点/生命周期 | `core/*` + `platforms/mac/*`；`pet_mac.py` 只组装 |
+| `pet/pet.pyw`（373 行） | 同上，与 macOS 逻辑重复 | `core/*` 复用；`platforms/windows/*` |
 | `pet/setup.py`（183 行） | venv/依赖逻辑与 UI 日志耦合 | `pet/runtime/setup.py`；输出结构化结果 |
 | `pet/launch.py`（40 行） | 启动逻辑简单但和 hooks 耦合 | `pet/runtime/launcher.py`；hooks 只调用接口 |
 | `hooks/hooks.json` | 只有 `register.ts` | 保持入口；内部模块化 |
@@ -195,10 +195,10 @@ tokens/model/context 留在插件 store，pet 不需要。多会话、XP、看�
 
 ### Step 2：抽 platform（M1）
 
-- `pet/platform/mac/window.py`：`PetView` 绘制、拖拽、尺寸。
-- `pet/platform/mac/menu.py`：右键菜单。
-- `pet/platform/mac/focus.py`：前台检测/聚焦。
-- `pet/platform/mac/notify.py`：声音/通知/Dock。
+- `pet/platforms/mac/window.py`：`PetView` 绘制、拖拽、尺寸。
+- `pet/platforms/mac/menu.py`：右键菜单。
+- `pet/platforms/mac/focus.py`：前台检测/聚焦。
+- `pet/platforms/mac/notify.py`：声音/通知/Dock。
 - `pet_mac.py` 变成 composition root：创建 settings、core、platform、定时器。
 
 ### Step 3：拆 hooks（M1–M2）
@@ -397,7 +397,7 @@ ADR 一旦接受不修改；用新 ADR 取代。
 
 ## 11. 依赖策略
 
-- Python core 只用 stdlib；`Pillow`/`pyobjc` 只出现在 platform/feature。
+- Python core 只用 stdlib；`Pillow`/`pyobjc` 只出现在 platforms/feature。
 - TS hooks 只用 engine API + stdlib/Node 内建；不引入 UI/状态库。
 - 新依赖检查：许可证、体积、维护活跃度、安全记录、失败回退、是否可 pin。
 - 锁定版本；升级走 PR + 回归测试；不自动合并依赖升级。

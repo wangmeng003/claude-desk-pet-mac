@@ -212,7 +212,7 @@ Explore 项不排期，但写清“为什么可能做、什么信号触发、第
 
 **增量重构**
 
-先抽 `pet/core/`，再抽 `platform/`，最后拆 hooks/bridge；每一步独立 PR、行为不变。顺序见 [ARCHITECTURE.md](ARCHITECTURE.md) §6。
+先抽 `pet/core/`，再抽 `platforms/`，最后拆 hooks/bridge；每一步独立 PR、行为不变。顺序见 [ARCHITECTURE.md](ARCHITECTURE.md) §6。
 
 ---
 

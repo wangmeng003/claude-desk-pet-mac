@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- M1 Step 2：抽出 `pet/platforms/mac/`（window=PetView 绘制/拖拽/窗口几何、menu=右键菜单、focus=进程/前台检测、notify=提示音），pet_mac.py 变为 composition root（settings/core/platforms 组装 + poll/tick/watch_* 编排）；golden 测试零改动全绿，--shot 冒烟新旧渲染逐像素等价
+- 包名用复数 `platforms`：原名 `platform` 会遮蔽标准库 platform（pytest 启动即缓存标准库模块，`import platform.mac` 必失败），ARCHITECTURE/ROADMAP 引用已同步
 - M1 Step 1：抽出 `pet/core/`（models/state_reader/sessions/view_model，纯 stdlib），pet_mac.py / pet.pyw 改为薄壳调用 core；行为不变，27 个 golden 测试原样全绿，新增 16 个 core 纯函数单测
 - CI 增加 core 边界检查：pet/core 出现 AppKit/tkinter/PIL/urllib 等直接失败
 - M1 Step 0：characterization tests + CI（pytest 全平台 golden 测试锁定 sessions 读取/poll 映射/视图规则；ruff、mypy、tsc --noEmit；macOS/Windows 双平台 CI）

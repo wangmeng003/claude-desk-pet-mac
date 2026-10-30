@@ -1,6 +1,6 @@
 """Step 0 characterization tests 的公共夹具。
 
-pet_mac.py / pet.pyw 里现在还住着渲染器（Step 1/2 才抽 core/platform），
+mac 渲染已抽到 pet/platforms/mac/（Step 2），Windows 渲染仍在 pet.pyw；
 本文件负责按平台加载被测模块、准备临时运行目录，让测试只触碰纯逻辑：
 read_latest / poll 的状态映射 / effective_state / display_text / SPRITES 约定。
 """

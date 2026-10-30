@@ -2,6 +2,15 @@
 from . import models, state_reader
 
 
+def _text(value) -> str:
+    """text/project 必须是字符串；坏数据回退成空串。
+
+    状态文件是外部写进来的，非字符串会一路流到渲染层
+    （气泡绘制 / endswith 直接抛异常），必须在边界挡掉。
+    """
+    return value if isinstance(value, str) else ''
+
+
 def normalize(data: dict) -> models.SessionState:
     """原始状态文件 → 视图无关 DTO（默认值与非法值回退和旧实现一致）。"""
     state = data.get('state', 'waiting')
@@ -12,8 +21,8 @@ def normalize(data: dict) -> models.SessionState:
         sound = None
     return models.SessionState(
         state=state,
-        text=data.get('text', ''),
-        project=data.get('project', ''),
+        text=_text(data.get('text', '')),
+        project=_text(data.get('project', '')),
         sound=sound,
     )
 

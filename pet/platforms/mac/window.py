@@ -7,12 +7,13 @@ import time
 
 from AppKit import (NSBezierPath, NSColor, NSCompositingOperationSourceOver, NSFont,
                     NSFontAttributeName, NSForegroundColorAttributeName, NSGraphicsContext,
-                    NSImage, NSImageInterpolationHigh, NSScreen, NSView, NSWindow,
+                    NSImage, NSImageInterpolationHigh, NSPNGFileType, NSScreen, NSView, NSWindow,
                     NSWindowCollectionBehaviorCanJoinAllSpaces,
                     NSWindowCollectionBehaviorFullScreenAuxiliary)
 from Foundation import NSAttributedString, NSMakePoint, NSMakeRect
 
 from core.models import SIZES, SPRITES
+from core.state_reader import number as _number
 
 TEXT = NSColor.colorWithCalibratedRed_green_blue_alpha_(0x3a / 255, 0x2a / 255, 0x1a / 255, 1)
 CREAM = NSColor.colorWithCalibratedRed_green_blue_alpha_(0xff / 255, 0xfa / 255, 0xf3 / 255, 1)
@@ -60,11 +61,12 @@ class PetView(NSView):
             bob = 3 * math.sin(t * 2.2)
         since = t - pet.hop_at
         hop = -14 * math.sin(since / 0.28 * math.pi) if since < 0.28 else 0
-        img = ctl.images[st]
-        iw = ctl.char_h * ctl.aspects.get(st, 0.73)
-        rect = NSMakeRect((W - iw) / 2, 4 - (bob + hop) * s, iw, ctl.char_h)
-        img.drawInRect_fromRect_operation_fraction_(rect, NSMakeRect(0, 0, 0, 0),
-                                                    NSCompositingOperationSourceOver, 1.0)
+        img = ctl.images.get(st) or ctl.fallback_image
+        if img is not None:
+            iw = ctl.char_h * ctl.aspects.get(st, 0.73)
+            rect = NSMakeRect((W - iw) / 2, 4 - (bob + hop) * s, iw, ctl.char_h)
+            img.drawInRect_fromRect_operation_fraction_(rect, NSMakeRect(0, 0, 0, 0),
+                                                        NSCompositingOperationSourceOver, 1.0)
 
         # 气泡：圆角矩形 + 下面的尾巴
         text = pet.display_text()
@@ -156,9 +158,15 @@ class PetWindow:
             img = NSImage.alloc().initWithContentsOfFile_(path)
             if img is None:
                 continue
+            try:
+                with Image.open(path) as im:
+                    aspect = im.width / im.height  # 每张保持自己的宽高比
+            except Exception:
+                aspect = 0.73  # PNG 坏了也要能画出来
             self.images[state] = img
-            with Image.open(path) as im:
-                self.aspects[state] = im.width / im.height  # 每张保持自己的宽高比
+            self.aspects[state] = aspect
+        # 某张立绘缺失/损坏时用它替身；全都没有就只是不画立绘，别让桌宠起不来
+        self.fallback_image = next(iter(self.images.values()), None)
 
     def make_window(self):
         self.W = max(round(self.char_h * max(self.aspects.values(), default=0.73)), round(190))
@@ -182,8 +190,8 @@ class PetWindow:
 
     def place(self):
         f = NSScreen.mainScreen().frame()
-        x = self.pet.settings.get('x', f.origin.x + f.size.width - self.W - 40)
-        y = self.pet.settings.get('y', f.origin.y + 70)
+        x = _number(self.pet.settings.get('x'), f.origin.x + f.size.width - self.W - 40)
+        y = _number(self.pet.settings.get('y'), f.origin.y + 70)
         x = min(max(f.origin.x, x), f.origin.x + f.size.width - 40)
         y = min(max(f.origin.y, y), f.origin.y + f.size.height - 40)
         self.win.setFrameOrigin_(NSMakePoint(x, y))
@@ -209,21 +217,43 @@ class PetWindow:
         self.win.orderFrontRegardless()
 
     def capture(self, path: str) -> None:
-        """自测用：把桌宠窗口自己存成 PNG（抓自己不用屏幕录制权限）。"""
-        from Quartz import CGWindowListCreateImage, CGImageDestinationCreateWithURL, \
-            CGImageDestinationAddImage, CGImageDestinationFinalize
-        from CoreFoundation import CFURLCreateWithFileSystemPath, kCFURLPOSIXPathStyle
+        """自测用：把桌宠画成 PNG（抓自己不用屏幕录制权限）。
 
-        def save(img, p):
-            url = CFURLCreateWithFileSystemPath(None, p, kCFURLPOSIXPathStyle, False)
+        早先用 CGWindowListCreateImage 抓窗口号：透明窗口没有自己的后备存储，
+        抓回来的是桌宠背后屏幕的内容（实测抓到终端），截图等于没用。
+        改成把 view 用 cacheDisplay 渲染进 bitmapImageRep——画的是桌宠自己。
+        """
+        view = self.view
+        bounds = view.bounds()
+        rep = view.bitmapImageRepForCachingDisplayInRect_(bounds)
+        view.cacheDisplayInRect_toBitmapImageRep_(bounds, rep)
+        data = rep.representationUsingType_properties_(NSPNGFileType, {})
+        if data is not None:
+            data.writeToFile_atomically_(path, True)
+        self.capture_screen(path)
+
+    def capture_screen(self, path: str) -> None:
+        """顺带存一张整屏的（需要屏幕录制权限，没有就跳过）。"""
+        try:
+            from Quartz import (CGWindowListCreateImage, CGImageDestinationCreateWithURL,
+                                CGImageDestinationAddImage, CGImageDestinationFinalize)
+            from CoreFoundation import CFURLCreateWithFileSystemPath, kCFURLPOSIXPathStyle
+
+            f = self.win.frame()
+            # AppKit 用左下角原点，CG 截图用左上角原点，换算一下
+            primary = NSScreen.screens()[0].frame()
+            cg_y = primary.size.height - f.origin.y - f.size.height
+            rect = ((f.origin.x, cg_y), (f.size.width, f.size.height))
+            img = CGWindowListCreateImage(rect, 0, 0, 0)
+            if img is None:
+                return
+            stem = os.path.splitext(path)[0]
+            out = f'{stem}-screen.png'
+            url = CFURLCreateWithFileSystemPath(None, out, kCFURLPOSIXPathStyle, False)
             dest = CGImageDestinationCreateWithURL(url, 'public.png', 1, None)
+            if dest is None:
+                return
             CGImageDestinationAddImage(dest, img, None)
             CGImageDestinationFinalize(dest)
-
-        f = self.win.frame()
-        # AppKit 用左下角原点，CG 截图用左上角原点，换算一下
-        primary = NSScreen.screens()[0].frame()
-        cg_y = primary.size.height - f.origin.y - f.size.height
-        rect = ((f.origin.x, cg_y), (f.size.width, f.size.height))
-        save(CGWindowListCreateImage(rect, 1, self.win.windowNumber(), 0), path)
-        save(CGWindowListCreateImage(rect, 0, 0, 0), path.replace('.png', '-screen.png'))
+        except Exception:
+            pass

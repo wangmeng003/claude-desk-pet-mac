@@ -10,6 +10,7 @@ import time
 from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 from Foundation import NSTimer
 
+from core import cli_args
 from core import sessions as core_sessions
 from core import state_reader as core_state_reader
 from core import view_model as core_view_model
@@ -21,8 +22,8 @@ from platforms.mac.notify import play_sound
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUNDS = os.path.join(os.path.dirname(HERE), 'sounds')
-_args = [a for a in sys.argv[1:] if not a.startswith('-')]  # 兼容 --shot 这类开关
-RUN_DIR = _args[0] if _args else os.path.join(os.path.expanduser('~'), '.claude', 'desk-pet')
+# --shot <路径> 里的路径是截图输出位置，不是运行目录
+RUN_DIR, SHOT_PATH = cli_args.parse_args(sys.argv[1:], cli_args.default_run_dir())
 SESSIONS = os.path.join(RUN_DIR, 'sessions')
 SETTINGS = os.path.join(RUN_DIR, 'settings.json')
 
@@ -170,10 +171,11 @@ def main():
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)  # 不占 Dock
     pet = Pet()
-    if '--shot' in sys.argv:  # --shot <路径>：画几帧后截图退出
-        path = sys.argv[sys.argv.index('--shot') + 1]
+    if SHOT_PATH is not None:  # --shot <路径>：画几帧后截图退出
+        if not SHOT_PATH:
+            sys.exit('--shot 需要一个输出路径，例如：pet_mac.py --shot /tmp/pet.png')
         NSTimer.scheduledTimerWithTimeInterval_repeats_block_(1.5, False,
-                                                              lambda t: shoot(pet, path))
+                                                              lambda t: shoot(pet, SHOT_PATH))
     NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.25, True, lambda t: pet.poll())
     NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.033, True, lambda t: pet.tick())
     NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.3, True, lambda t: pet.watch_focus())
@@ -181,10 +183,22 @@ def main():
     app.run()
 
 
+def write_error_log():
+    """把异常写进运行目录；目录不可写时至少别把原始异常吞掉。"""
+    import traceback
+    try:
+        os.makedirs(RUN_DIR, exist_ok=True)
+        with open(os.path.join(RUN_DIR, 'pet-error.log'), 'a', encoding='utf-8') as f:
+            f.write(traceback.format_exc())
+            f.write('\n')
+    except Exception:
+        traceback.print_exc()  # 兜底：至少打到 stderr
+
+
 if __name__ == '__main__':
     try:
         main()
+    except SystemExit:
+        raise
     except Exception:
-        import traceback
-        with open(os.path.join(RUN_DIR, 'pet-error.log'), 'w', encoding='utf-8') as f:
-            traceback.print_exc(file=f)
+        write_error_log()

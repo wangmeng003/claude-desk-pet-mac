@@ -13,7 +13,7 @@ if str(PET_DIR) not in sys.path:
     sys.path.insert(0, str(PET_DIR))
 
 from conftest import write_session  # noqa: E402
-from core import models, sessions, state_reader, view_model  # noqa: E402
+from core import cli_args, models, sessions, state_reader, view_model  # noqa: E402
 
 NOW = time.time()
 OLD = NOW - 700  # 超过 IDLE_AFTER（600s）
@@ -36,6 +36,22 @@ class TestNormalize:
         assert view_model.normalize({'sound': 'hacked'}).sound is None
         assert view_model.normalize({'sound': 'error'}).sound == 'error'
         assert view_model.normalize({}).sound is None
+
+    def test_non_string_text_becomes_empty(self):
+        """坏数据里的非字符串 text/project 不能流到渲染层（否则气泡绘制崩）。"""
+        s = view_model.normalize({'state': 'tool', 'text': 123, 'project': {'a': 1}})
+        assert s.text == ''
+        assert s.project == ''
+
+    def test_non_string_text_keeps_string_text(self):
+        s = view_model.normalize({'state': 'tool', 'text': '在跑命令…'})
+        assert s.text == '在跑命令…'
+
+    def test_unhashable_state_does_not_raise(self):
+        """state 是个 list 时不能抛 TypeError（unhashable），要回退成 waiting。"""
+        s = view_model.normalize({'state': ['tool'], 'text': 'x'})
+        assert s.state == 'waiting'
+        assert s.text == 'x'
 
 
 class TestEffectiveState:
@@ -82,6 +98,29 @@ class TestStateReader:
         p.write_text('{broken', encoding='utf-8')
         assert state_reader.load_settings(str(p)) == {}
 
+    def test_load_settings_non_object_returns_empty(self, tmp_path):
+        """settings.json 里是数组/标量时必须回退成空 dict（否则写设置会 TypeError）。"""
+        p = tmp_path / 'settings.json'
+        p.write_text('[1,2,3]', encoding='utf-8')
+        assert state_reader.load_settings(str(p)) == {}
+        p.write_text('"hi"', encoding='utf-8')
+        assert state_reader.load_settings(str(p)) == {}
+        p.write_text('null', encoding='utf-8')
+        assert state_reader.load_settings(str(p)) == {}
+
+    def test_save_settings_is_atomic(self, tmp_path, monkeypatch):
+        """写到一半炸掉也不能把旧设置留成半截 JSON，且不留临时文件。"""
+        p = tmp_path / 'settings.json'
+        state_reader.save_settings(str(p), {'size': '小'})
+
+        def boom(*_a, **_k):
+            raise OSError('磁盘满了')
+
+        monkeypatch.setattr(state_reader.json, 'dump', boom)
+        state_reader.save_settings(str(p), {'size': '大'})
+        assert state_reader.load_settings(str(p)) == {'size': '小'}  # 旧值还在
+        assert [f.name for f in tmp_path.iterdir()] == ['settings.json']  # 无临时文件残留
+
 
 class TestSessionsReadLatest:
     def test_newest_and_expired(self, tmp_path):
@@ -101,3 +140,34 @@ class TestSessionsReadLatest:
         sessions_dir.mkdir()
         write_session(sessions_dir, 'bad', raw='{{{')
         assert sessions.read_latest(str(sessions_dir)) is None
+
+
+class TestCliArgs:
+    """命令行解析：--shot 的路径不是运行目录（否则桌宠找不到状态文件）。"""
+
+    def test_run_dir_only(self):
+        run_dir, shot = cli_args.parse_args(['/run/dir'], '/default')
+        assert (run_dir, shot) == ('/run/dir', None)
+
+    def test_shot_path_is_not_run_dir(self):
+        run_dir, shot = cli_args.parse_args(['--shot', '/tmp/shot.png'], '/default')
+        assert run_dir == '/default'
+        assert shot == '/tmp/shot.png'
+
+    def test_run_dir_and_shot(self):
+        run_dir, shot = cli_args.parse_args(['--shot', '/tmp/s.png', '/run/dir'], '/default')
+        assert (run_dir, shot) == ('/run/dir', '/tmp/s.png')
+
+    def test_shot_without_path(self):
+        run_dir, shot = cli_args.parse_args(['--shot'], '/default')
+        assert run_dir == '/default'
+        assert shot == ''
+
+    def test_flags_are_not_positional(self):
+        run_dir, shot = cli_args.parse_args(['--verbose', '/run/dir'], '/default')
+        assert run_dir == '/run/dir'
+
+    def test_empty_uses_default(self):
+        run_dir, shot = cli_args.parse_args([], '/default')
+        assert run_dir == '/default'
+        assert shot is None

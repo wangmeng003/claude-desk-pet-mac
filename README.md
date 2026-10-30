@@ -103,6 +103,12 @@ claude plugin install desk-pet --marketplace wangmeng003/claude-desk-pet-mac
 
 桌宠的位置、大小和开关保存在 `~/.claude/desk-pet/settings.json`。
 
+## 开发路线
+
+后续计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，架构与代码质量约定见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，技术契约见 [docs/specs/](docs/specs/)。
+
+近期只做三件事：核心 loop 稳定、权限提醒、安装体验。多会话和主题放在后续条件里程碑；XP、看板、工作台等方向在路线图的 Explore 里按触发条件推进。
+
 ## 说明
 
 - 这是个人粉丝作品，与 Anthropic 官方无关

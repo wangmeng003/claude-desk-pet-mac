@@ -52,5 +52,7 @@ jobs:
           node-version: '22'
       - name: 类型检查 hooks/
         run: npm exec --yes --package=typescript@5.6 -- tsc -p hooks
+      # node 22 需显式 --experimental-strip-types 才会执行 .ts 测试；
+      # 不带 flag 时默认发现规则不包含 .ts，会以 0 个测试假绿
       - name: hooks 单测（node:test）
         run: node --test --experimental-strip-types hooks/

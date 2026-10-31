@@ -87,7 +87,7 @@ class TestCollect:
 
     def test_missing_ts_not_live(self, tmp_path):
         """§8.3：缺 ts → 不参与聚合（normalize ts=0 → 必然超 TTL）。"""
-        write_session(tmp_path, 'a', {'state': 'tool'})
+        write_session(tmp_path, 'a', raw='{"state": "tool"}')  # raw：绕过夹具自动补 ts
         assert aggregate.collect(str(tmp_path), now=NOW) == []
 
     def test_bad_json_skipped(self, tmp_path):

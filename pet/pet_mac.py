@@ -17,8 +17,10 @@ from Foundation import NSTimer
 from core import cli_args
 from core import errors as core_errors
 from core import lock
+from core import aggregate as core_aggregate
 from core import sessions as core_sessions
 from core import state_reader as core_state_reader
+from core import tracker as core_tracker
 from core import view_model as core_view_model
 from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (测试从入口锁定契约)
 from platforms.mac import focus
@@ -104,14 +106,17 @@ class Pet:
         self.settings = load_settings()
         self.state, self.text, self.project = 'waiting', '我来啦～', ''
         self.state_since = time.time()
-        self.last_mtime = 0
-        self.last_mtime_seen = 0
         self.hop_at = time.time()
         self.hidden = False
-        self.error_streak = 0  # 连续 error 计数（石化彩蛋）
         self.last_alive = time.time()
         self.notify_gate = core_view_model.NotifyGate()
         self.focus_watch = focus.ForegroundWatch()
+        # 多会话聚合（M3 #21）：pinned 是用户点菜单选的主会话（#22 接菜单）；
+        # total/waiting 是气泡计数；last_states 供菜单重建（#22）
+        self.pinned = ''
+        self.total, self.waiting = 1, 0
+        self.tracker = core_tracker.SessionTracker()
+        self.last_states = []
         self.bridge = None  # main() 里 attach_bridge 后才有（#15）
         self.card_events = queue.SimpleQueue()  # HTTP 线程 → 主线程（只传事件，不碰 AppKit）
         self.card = None
@@ -185,8 +190,9 @@ class Pet:
 
     # ---------- 状态 ----------
     def display_text(self):
-        return core_view_model.display_text_with_dots(
+        base = core_view_model.display_text_with_dots(
             self.state, self.text, time.time(), self.state_since)
+        return core_view_model.bubble_text(base, self.total, self.waiting)
 
     def effective_state(self):
         return core_view_model.effective_state(self.state, self.state_since, time.time())
@@ -202,34 +208,34 @@ class Pet:
             self.refresh()
 
     def poll_once(self):
-        latest = read_latest()
-        if latest and latest[0] != self.last_mtime:
-            self.last_mtime_seen, self.last_mtime = self.last_mtime, latest[0]
-            mapped = core_view_model.normalize(latest[1])
-            changed = mapped.state != self.state
-            self.state, self.text = mapped.state, mapped.text
-            self.project = mapped.project
-            self.state_since = time.time()
-            # 石化彩蛋（协议 §3）：连续 3 次 error 由渲染层自己触发
-            if mapped.state == 'error':
-                self.error_streak += 1
-                if self.error_streak >= 3:
-                    self.state, self.text = 'stone', '石化了…'
-            else:
-                self.error_streak = 0
-            if (mapped.sound and self.settings.get('sound', True)
-                    and not self.settings.get('dnd') and self.last_mtime_seen):
-                play_sound(os.path.join(SOUNDS, mapped.sound + '.wav'))
-            # 原生通知（#6/#11）：长任务完成/出错/需要你看，状态切换时弹一次；
-            # 勿扰不弹不响、同一件事 2 秒内只弹一次、attention 自带铃声
-            if self.notify_gate.allow(mapped.state, mapped.text, mapped.session,
-                                      changed, self.settings, time.time()):
+        # 多会话聚合（M3 #21，specs/state.md §5）：不再按 mtime 挑最新文件，
+        # 而是聚合全部活跃会话——任一会话出错/需要你都能当上主会话。
+        now = time.time()
+        states = core_aggregate.collect(SESSIONS, now)
+        self.last_states = states  # 菜单列表消费（#22）
+        if self.pinned and self.pinned not in {s.session for s in states}:
+            self.pinned = ''  # 被 pin 的会话过期/结束：回聚合主会话（#19 口径）
+        result = core_aggregate.pick(states, self.pinned)
+        if result.main is None:
+            self.tracker.reset()  # 没有活跃会话：画面保持，退出交给 watch_lifecycle
+            return
+        fx = self.tracker.apply(states, result.main)
+        self.state, self.text, self.project = fx.display_state, fx.display_text, fx.project
+        self.total, self.waiting = result.total, result.waiting
+        if fx.reset_since:
+            self.state_since = now
+            self.hop_at = now
+        if fx.sound and self.settings.get('sound', True) and not self.settings.get('dnd'):
+            play_sound(os.path.join(SOUNDS, fx.sound + '.wav'))
+        # 原生通知（#6/#11）：按会话迁移触发——后台会话的 error/attention
+        # 不被主会话淹没；勿扰/开关/2 秒去重仍由 NotifyGate 把关
+        for ev in fx.notifies:
+            if self.notify_gate.allow(ev.state, ev.text, ev.session, True,
+                                      self.settings, now):
                 notify('Claude 桌宠',
-                       core_view_model.notify_body(mapped.text, mapped.project,
+                       core_view_model.notify_body(ev.text, ev.project,
                                                    bool(self.settings.get('privacy'))),
-                       sound=core_view_model.notify_sound(mapped.state))
-            if changed:
-                self.hop_at = time.time()
+                       sound=core_view_model.notify_sound(ev.state))
 
     def tick(self):
         # 33ms 动画帧 + “思考中”点点点 + 卡片倒计时

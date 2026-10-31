@@ -54,13 +54,19 @@ requires_platform = pytest.mark.skipif(
 
 def write_session(sessions_dir: Path, sid: str, data=None, raw: str | None = None,
                   age: float = 0.0) -> Path:
-    """写一个会话状态文件；age 秒前修改（mtime），用于新旧/过期场景。"""
+    """写一个会话状态文件；age 秒前修改（mtime），用于新旧/过期场景。
+
+    data 里没给 ts 时自动补一个与 mtime 对齐的：协议 §2 ts 必填（写入方
+    state_writer 每次 都写），聚合按 ts 判 TTL/事件，缺 ts 的文件不参与。
+    """
     p = sessions_dir / f'{sid}.json'
+    ts = time.time() - age
     if raw is not None:
         p.write_text(raw, encoding='utf-8')
     else:
+        if 'ts' not in data:
+            data = {**data, 'ts': ts}
         p.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
-    ts = time.time() - age
     os.utime(p, (ts, ts))
     return p
 
@@ -84,7 +90,7 @@ def make_pet():
     pet.text = '我来啦～'
     pet.project = ''
     pet.state_since = time.time()
-    pet.last_mtime = 0
+    pet.last_mtime = 0        # Windows 旧 poll 路径用（#23 移除）；mac 已走聚合器
     pet.last_mtime_seen = 0
     pet.hop_at = time.time()
     pet.error_streak = 0
@@ -94,6 +100,12 @@ def make_pet():
     pet.bridge = None  # 审批卡片接线（#15）：没 attach_bridge 时整条链路静默
     pet.card = None
     pet.card_events = queue.SimpleQueue()
+    # 多会话聚合（M3 #21，mac 路径；Windows #23 接入前多余无害）
+    from core import tracker as core_tracker
+    pet.pinned = ''
+    pet.total, pet.waiting = 1, 0
+    pet.tracker = core_tracker.SessionTracker()
+    pet.last_states = []
     if pet_win is not None and petmod is pet_win:
         pet.canvas = _CanvasStub(pet)
         pet.root = _RootStub()  # Windows 版 poll() 末尾用 root.after 调度下一帧

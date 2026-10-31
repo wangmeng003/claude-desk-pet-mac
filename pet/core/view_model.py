@@ -72,6 +72,20 @@ def thinking_dots(text: str, now: float) -> str:
     return text + '.' * (int(now * 2.5) % 3 + 1)
 
 
+def bubble_text(base: str, total: int, waiting: int) -> str:
+    """多会话气泡后缀（specs §5.3，M3 #21）：单会话不加后缀（与旧版逐字节一致）。
+
+    示例：'在改 register.ts · 3 个会话 · 2 个等你'。waiting 是其中需要用户
+    处理的数量（attention=True）。
+    """
+    if total <= 1:
+        return base
+    suffix = f' · {total} 个会话'
+    if waiting > 0:
+        suffix += f' · {waiting} 个等你'
+    return base + suffix
+
+
 # 要发原生通知的状态（#6）：长任务完成（celebrate）、出错（error）、需要你看（attention）。
 NOTIFY_STATES = frozenset({'celebrate', 'error', 'attention'})
 

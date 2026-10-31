@@ -40,7 +40,8 @@ class TestReadLatest:
     def test_missing_fields_kept_as_is(self, pet_state):
         """缺字段/多字段的数据原样返回，默认值由 poll() 决定。"""
         petmod, _tmp, sessions = pet_state
-        write_session(sessions, 'minimal', {'state': 'tool'}, age=10)
+        # raw：夹具的 data 路径会自动补协议必填的 ts，这里就要「最少字段」
+        write_session(sessions, 'minimal', raw='{"state": "tool"}', age=10)
         _mtime, data = petmod.read_latest()
         assert data == {'state': 'tool'}
 

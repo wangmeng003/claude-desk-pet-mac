@@ -201,15 +201,14 @@ class TestNotifyGating:
     def test_go_handle_failure_shows_project_path(self, pet_state, monkeypatch):
         # 菜单「去处理」找不到终端窗口时，气泡给出项目路径（#11）
         petmod, _tmp, _sessions = pet_state
-        if pet_mac is not None and petmod is pet_mac:
-            monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: False)
-            go = petmod.Pet.goHandle_
-        else:
-            monkeypatch.setattr(petmod.Pet, 'focus_claude', lambda self: False)
-            go = petmod.Pet.go_handle
         pet = make_pet()
         pet.project = 'demo'
-        go(pet, None)
+        if pet_mac is not None and petmod is pet_mac:
+            monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: False)
+            pet.goHandle_(None)  # AppKit 动作带 sender
+        else:
+            monkeypatch.setattr(petmod.Pet, 'focus_claude', lambda self: False)
+            pet.go_handle()  # tkinter 回调无参数
         assert 'demo' in pet.text
 
 

@@ -134,7 +134,7 @@ class PetView(NSView):
     def rightMouseDown_(self, e):
         self.pet.show_menu(e.locationInWindow())
 
-    # 菜单 target 是 view，这里转发给 Pet
+    # 菜单 target 是 view，这里转发给 Pet（漏转发的动作 AppKit 会把菜单项禁用）
     def setSize_(self, sender):
         self.pet.setSize_(sender)
 
@@ -143,6 +143,18 @@ class PetView(NSView):
 
     def toggleSound_(self, sender):
         self.pet.toggleSound_(sender)
+
+    def togglePrivacy_(self, sender):
+        self.pet.togglePrivacy_(sender)
+
+    def toggleNotify_(self, sender):
+        self.pet.toggleNotify_(sender)
+
+    def toggleDnd_(self, sender):
+        self.pet.toggleDnd_(sender)
+
+    def goHandle_(self, sender):
+        self.pet.goHandle_(sender)
 
     def quit_(self, sender):
         self.pet.quit_(sender)

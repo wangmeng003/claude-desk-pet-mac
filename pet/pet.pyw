@@ -213,6 +213,7 @@ class Pet:
         self.error_streak = 0  # 连续 error 计数（石化彩蛋）
         self.drag = None
         self.last_alive = time.time()
+        self.notify_gate = core_view_model.NotifyGate()
         self.bubble_text = None
 
         self.build()
@@ -323,6 +324,10 @@ class Pet:
         self.notify_var = tk.BooleanVar(value=self.settings.get('notify', True))
         self.menu.add_checkbutton(label='原生通知', variable=self.notify_var,
                                   command=self.toggle_notify)
+        self.dnd_var = tk.BooleanVar(value=self.settings.get('dnd', False))
+        self.menu.add_checkbutton(label='勿扰模式（不弹横幅不响铃）', variable=self.dnd_var,
+                                  command=self.toggle_dnd)
+        self.menu.add_command(label='去处理（切到终端）', command=self.go_handle)
         self.menu.add_separator()
         self.menu.add_command(label='退出桌宠', command=self.root.destroy)
 
@@ -352,6 +357,19 @@ class Pet:
         self.settings['notify'] = self.notify_var.get()
         save_settings(self.settings)
 
+    def toggle_dnd(self):
+        # 勿扰模式（#11）：不弹横幅不响铃，气泡/表情照常
+        self.settings['dnd'] = self.dnd_var.get()
+        save_settings(self.settings)
+
+    def go_handle(self):
+        # 菜单「去处理」（#11）：聚焦终端；找不到窗口时气泡给出项目路径
+        if not self.focus_claude():
+            self.text = (f'没找到终端窗口，项目在 {self.project}'
+                         if self.project else '没找到终端窗口')
+            self.state_since = time.time()
+            self.draw_bubble()
+
     # ---------- 鼠标 ----------
     def on_press(self, e):
         self.drag = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y())
@@ -365,13 +383,19 @@ class Pet:
         self.settings['x'], self.settings['y'] = self.root.winfo_x(), self.root.winfo_y()
         save_settings(self.settings)
 
-    def on_double(self, e):
-        # 双击：把 Claude 窗口叫到前台
+    def focus_claude(self):
+        """把 Claude 窗口叫到前台；返回是否找到（失败时调用方气泡给项目路径，#11）。"""
         hwnd = find_claude_window()
         if hwnd:
             if user32.IsIconic(hwnd):
                 user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
+            return True
+        return False
+
+    def on_double(self, e):
+        # 双击：把 Claude 窗口叫到前台
+        self.focus_claude()
 
     # ---------- 循环 ----------
     def schedule(self, delay, fn):
@@ -411,14 +435,17 @@ class Pet:
                     self.state, self.text = 'stone', '石化了…'
             else:
                 self.error_streak = 0
-            if mapped.sound and self.sound_var.get() and self.last_mtime_seen:  # 刚启动时不重播旧提示音
+            if (mapped.sound and self.sound_var.get() and not self.settings.get('dnd')
+                    and self.last_mtime_seen):  # 刚启动时不重播旧提示音
                 try:
                     winsound.PlaySound(os.path.join(SOUNDS, mapped.sound + '.wav'),
                                        winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
                 except Exception:
                     pass
-            # 原生通知（#6）：长任务完成/出错/需要你看，状态切换时 Toast + 闪任务栏
-            if core_view_model.wants_notify(mapped.state, changed, self.settings):
+            # 原生通知（#6/#11）：长任务完成/出错/需要你看，状态切换时 Toast + 闪任务栏；
+            # 勿扰不弹不响（Toast 自带默认铃声）、同一件事 2 秒内只弹一次
+            if self.notify_gate.allow(mapped.state, mapped.text, mapped.session,
+                                      changed, self.settings, time.time()):
                 toast('Claude 桌宠',
                       core_view_model.notify_body(mapped.text, mapped.project,
                                                   bool(self.settings.get('privacy'))))

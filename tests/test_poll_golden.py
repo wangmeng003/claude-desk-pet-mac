@@ -138,6 +138,82 @@ class TestSoundGating:
 
 
 @requires_platform
+class TestNotifyGating:
+    """#11：poll 路径上的原生通知——声音标记、勿扰、2 秒去重。"""
+
+    def _record(self, petmod, monkeypatch):
+        """记录原生通知调用；mac 记 (title, body, sound)，Windows 的 toast 无声参记 None。"""
+        calls = []
+        if pet_mac is not None and petmod is pet_mac:
+            monkeypatch.setattr(petmod, 'notify', lambda t, b, sound=False: calls.append((t, b, sound)))
+        else:
+            monkeypatch.setattr(petmod, 'toast', lambda t, b: calls.append((t, b, None)))
+            monkeypatch.setattr(petmod, 'flash_claude', lambda: None)
+        return calls
+
+    def test_attention_notifies_with_sound(self, pet_state, monkeypatch):
+        petmod, _tmp, sessions = pet_state
+        calls = self._record(petmod, monkeypatch)
+        write_session(sessions, 's1', {'state': 'waiting', 'text': '', 'session': 's1'}, age=20)
+        pet = make_pet()
+        pet.poll()
+        write_session(sessions, 's1',
+                      {'state': 'attention', 'text': '需要你看一下', 'session': 's1'}, age=1)
+        pet.poll()
+        assert len(calls) == 1
+        title, body, sound = calls[0]
+        assert title == 'Claude 桌宠'
+        assert '需要你看一下' in body and '双击桌宠' in body
+        if pet_mac is not None and petmod is pet_mac:  # 声音标记只有 mac 横幅用
+            assert sound is True
+
+    def test_same_attention_twice_quickly_notifies_once(self, pet_state, monkeypatch):
+        # 连续两次同样的 attention（中间隔个 thinking 让 changed 成立）2 秒内只弹一次
+        petmod, _tmp, sessions = pet_state
+        calls = self._record(petmod, monkeypatch)
+        pet = make_pet()
+        for i, state in enumerate(('attention', 'thinking', 'attention')):
+            write_session(sessions, 's1',
+                          {'state': state, 'text': '需要你看一下', 'session': 's1'},
+                          age=30 - i * 10)
+            pet.poll()
+        assert len(calls) == 1
+
+    def test_dnd_blocks_banner_and_chime(self, pet_state, monkeypatch):
+        # 勿扰（#11）：不弹横幅也不播提示音；气泡状态照常更新
+        petmod, _tmp, sessions = pet_state
+        calls = self._record(petmod, monkeypatch)
+        plays = []
+        if pet_mac is not None and petmod is pet_mac:
+            monkeypatch.setattr(petmod, 'play_sound', lambda p: plays.append(p))
+        else:
+            monkeypatch.setattr(petmod.winsound, 'PlaySound', lambda p, f: plays.append(p))
+        write_session(sessions, 's1', {'state': 'waiting', 'text': '', 'session': 's1'}, age=20)
+        pet = make_pet()
+        pet.settings['dnd'] = True
+        pet.poll()
+        write_session(sessions, 's1',
+                      {'state': 'celebrate', 'text': '搞定', 'sound': 'done', 'session': 's1'}, age=1)
+        pet.poll()
+        assert calls == [] and plays == []
+        assert pet.state == 'celebrate'  # 气泡/表情不受勿扰影响
+
+    def test_go_handle_failure_shows_project_path(self, pet_state, monkeypatch):
+        # 菜单「去处理」找不到终端窗口时，气泡给出项目路径（#11）
+        petmod, _tmp, _sessions = pet_state
+        if pet_mac is not None and petmod is pet_mac:
+            monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: False)
+            go = petmod.Pet.goHandle_
+        else:
+            monkeypatch.setattr(petmod, 'focus_claude', lambda: False)
+            go = petmod.Pet.go_handle
+        pet = make_pet()
+        pet.project = 'demo'
+        go(pet, None)
+        assert 'demo' in pet.text
+
+
+@requires_platform
 class TestPollResilience:
     """poll 里出异常不能让轮询停摆，也不能把异常抛给调用方。"""
 

@@ -37,6 +37,15 @@ class PetMenu:
         self.notify_item.setTarget_(pet.view)
         self.notify_item.setState_(1 if pet.settings.get('notify', True) else 0)
         self.menu.addItem_(self.notify_item)
+        self.dnd_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            '勿扰模式（不弹横幅不响铃）', 'toggleDnd:', '')
+        self.dnd_item.setTarget_(pet.view)
+        self.dnd_item.setState_(1 if pet.settings.get('dnd') else 0)
+        self.menu.addItem_(self.dnd_item)
+        go_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            '去处理（切到终端）', 'goHandle:', '')
+        go_item.setTarget_(pet.view)
+        self.menu.addItem_(go_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
         quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('退出桌宠', 'quit:', '')
         quit_item.setTarget_(pet.view)

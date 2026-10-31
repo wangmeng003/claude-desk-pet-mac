@@ -46,12 +46,16 @@ class TestNormalize:
     def test_attention_is_known(self):
         assert view_model.normalize({'state': 'attention', 'text': '需要你看一下'}).state == 'attention'
 
-    def test_v1_fields_ignored_by_reader(self):
-        """v1 新增字段（v/session/agent/attention）读取方容忍忽略。"""
+    def test_v1_fields_ignored_except_session(self):
+        """v1 新增字段读取方容忍忽略；session 保留（#11 通知去重键要用）。"""
         s = view_model.normalize({'v': 1, 'session': 's1', 'agent': 'claude-code',
                                   'state': 'tool', 'text': 'x', 'project': 'p',
                                   'ts': 1793375735.4, 'sound': None, 'attention': True})
-        assert s == models.SessionState('tool', 'x', 'p', None)
+        assert s == models.SessionState('tool', 'x', 'p', None, 's1')
+
+    def test_session_defaults_empty_and_sanitized(self):
+        assert view_model.normalize({'state': 'tool'}).session == ''
+        assert view_model.normalize({'state': 'tool', 'session': 42}).session == ''  # 坏数据挡掉
 
     def test_sound_filtered(self):
         assert view_model.normalize({'sound': 'hacked'}).sound is None

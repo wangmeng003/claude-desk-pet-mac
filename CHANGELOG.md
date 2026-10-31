@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- M2 #11：attention 事件升级（权限请求/通知事件 → 气泡 + 原生通知 + 声音）：
+  - 通知策略从 `wants_notify` 换成 `NotifyGate`（纯函数对象，测试锁定）：
+    celebrate/error/attention 三类状态切换时弹一次；**同一件事（session+状态+文案）
+    2 秒内只弹一次**；attention 的 key 含 state，不会被前面的完成通知窗口吃掉
+    （权限事件优先于完成通知）
+  - attention 通知带铃声（macOS 通知 `sound name "Glass"`；Windows Toast 自带系统音），
+    celebrate/error 仍然静音横幅（完成提示音另有 wav 叮咚，避免双响）
+  - 状态文件协议 v1 的 `session` 字段接入 `SessionState`（去重键的一部分；
+    normalize 对其余 v1 字段仍忽略）
+  - 菜单新增「勿扰模式（不弹横幅不响铃）」：`settings.json` 的 `dnd`，开启后横幅与
+    wav 提示音都不出，气泡/表情照常；通知开关 `notify` 关掉时横幅也不出
+  - 菜单新增「去处理（切到终端）」：聚焦跑着 claude 的 App（macOS NSWorkspace 激活 /
+    Windows SetForegroundWindow + 最小化恢复）；找不到窗口时气泡给出项目路径
+  - 修复 M1 遗留回归：PetView 漏转发 `togglePrivacy:`/`toggleNotify:`，macOS 菜单里
+    「隐私模式/原生通知」两项自 #8/#6 起一直点了没反应（AppKit 对没有 selector 实现
+    的菜单项静默禁用）；现把全部菜单动作补齐转发
 - M1 #6：原生通知（celebrate/error/attention 三类状态，状态切换时弹一次）：
   - macOS：`osascript display notification`（脚本进程稳定免权限；UNUserNotificationCenter 需要真实
     bundle 身份，点按回调拿不到，留 M2 #11 评估）；accessory 应用无 Dock 图标，「Dock 弹跳」以

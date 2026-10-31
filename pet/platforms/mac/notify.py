@@ -20,11 +20,16 @@ def _quote(text: str) -> str:
     return text.replace('\\', '\\\\').replace('"', '\\"')
 
 
-def notify(title: str, body: str) -> None:
-    """原生通知（Notification Center）。失败静默——通知是加分项，不是命脉。"""
+def notify(title: str, body: str, sound: bool = False) -> None:
+    """原生通知（Notification Center）。失败静默——通知是加分项，不是命脉。
+
+    sound=True 时横幅自带铃声（#11：attention 用系统音 Glass）。
+    """
     try:
         script = (f'display notification "{_quote(body)}" '
                   f'with title "{_quote(title)}"')
+        if sound:
+            script += ' sound name "Glass"'
         subprocess.Popen(['osascript', '-e', script], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:

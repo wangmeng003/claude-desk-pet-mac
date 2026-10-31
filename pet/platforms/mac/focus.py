@@ -44,13 +44,17 @@ def claude_app_pids() -> set[int]:
     return result
 
 
-def bring_claude_front() -> None:
-    """双击：把跑着 claude 的那个 App 叫到前台。"""
+def bring_claude_front() -> bool:
+    """双击/菜单「去处理」：把跑着 claude 的那个 App 叫到前台。
+
+    返回是否找到并激活了窗口——失败时调用方在气泡里给出项目路径（#11）。
+    """
     ws = NSWorkspace.sharedWorkspace()
     for a in ws.runningApplications():
         if a.processIdentifier() in claude_app_pids():
             a.activateWithOptions_(1 << 1)  # ignoreOtherApps
-            return
+            return True
+    return False
 
 
 class ForegroundWatch:

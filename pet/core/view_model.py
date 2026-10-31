@@ -16,7 +16,7 @@ def normalize(data: dict) -> models.SessionState:
 
     - 'aborted' 是旧格式，映射到 error（文案保留）；
     - 未知/缺失/非字符串 state 回退 idle（协议：坏数据按「没有活跃工作」处理）；
-    - v1 新增字段（v/session/agent/attention）读取方忽略。
+    - v1 新增字段里 session 保留（通知去重键用，#11），v/agent/attention 读取方忽略。
     """
     state = data.get('state')
     if state == 'aborted':
@@ -31,6 +31,7 @@ def normalize(data: dict) -> models.SessionState:
         text=_text(data.get('text', '')),
         project=_text(data.get('project', '')),
         sound=sound,
+        session=_text(data.get('session', '')),
     )
 
 
@@ -63,19 +64,48 @@ def thinking_dots(text: str, now: float) -> str:
 
 
 # 要发原生通知的状态（#6）：长任务完成（celebrate）、出错（error）、需要你看（attention）。
-# 同状态重复刷新由调用方的 changed 挡掉，这里只看状态本身。
 NOTIFY_STATES = frozenset({'celebrate', 'error', 'attention'})
 
+# 同一件事 2 秒内只通知一次（#11）
+DEDUP_WINDOW = 2.0
 
-def wants_notify(state: str, changed: bool, settings: dict | None = None) -> bool:
-    """状态切换到值得打扰用户的状态时发一次原生通知。
+
+class NotifyGate:
+    """原生通知的最后一道闸（#6/#11）：开关 + 勿扰 + 2 秒去重。
 
     - settings['notify'] 为 False 时整体关闭（桌宠菜单开关）；
-    - changed=False（同状态重复写文件）不通知，避免反复弹窗。
+    - changed=False（同状态重复写文件）不通知，避免反复弹窗；
+    - settings['dnd']（勿扰模式）不弹横幅不响铃，气泡/表情照常（渲染层与此闸无关）；
+    - 去重键 = (session, state, text)：同一会话/工具/摘要 2 秒内只放行一次。
+      键里含 state，attention 不会被刚弹过的 celebrate 窗口吃掉
+      （#11：权限事件优先于完成通知）。
     """
-    if settings is not None and not settings.get('notify', True):
-        return False
-    return changed and state in NOTIFY_STATES
+
+    def __init__(self) -> None:
+        self._key: tuple[str, str, str] | None = None
+        self._at: float = 0.0
+
+    def allow(self, state: str, text: str, session: str,
+              changed: bool, settings: dict | None, now: float) -> bool:
+        if not changed or state not in NOTIFY_STATES:
+            return False
+        if settings is not None:
+            if not settings.get('notify', True):
+                return False
+            if settings.get('dnd'):
+                return False
+        key = (session, state, text)
+        if key == self._key and now - self._at < DEDUP_WINDOW:
+            return False
+        self._key, self._at = key, now
+        return True
+
+
+def notify_sound(state: str) -> bool:
+    """通知自带声音（#11）：只有 attention 响铃（权限提醒最要紧）；
+    完成/出错的声音走状态文件里的提示音，横幅不再重复响。
+    """
+    return state == 'attention'
 
 
 def notify_body(text: str, project: str, privacy: bool) -> str:

@@ -24,6 +24,8 @@ if str(PET_DIR) not in sys.path:
     sys.path.insert(0, str(PET_DIR))
 importlib.invalidate_caches()
 
+from core import view_model as core_view_model  # noqa: E402  (pet/ 进 sys.path 后才能导入)
+
 
 def _load_module(name: str, path: Path):
     loader = SourceFileLoader(name, str(path))
@@ -86,6 +88,7 @@ def make_pet():
     pet.hop_at = time.time()
     pet.error_streak = 0
     pet.settings = {'sound': True}
+    pet.notify_gate = core_view_model.NotifyGate()
     pet.refresh = lambda: None  # 实例属性盖掉方法，渲染不执行
     if pet_win is not None and petmod is pet_win:
         pet.canvas = _CanvasStub(pet)

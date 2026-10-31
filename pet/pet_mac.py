@@ -92,6 +92,7 @@ class Pet:
         self.hidden = False
         self.error_streak = 0  # 连续 error 计数（石化彩蛋）
         self.last_alive = time.time()
+        self.notify_gate = core_view_model.NotifyGate()
         self.focus_watch = focus.ForegroundWatch()
 
         self.window = mac_window.PetWindow(self, os.path.join(HERE, 'sprites'), RUN_DIR)
@@ -110,7 +111,7 @@ class Pet:
         self.menu.popup(self.view, point)
 
     def bring_claude_front(self):
-        focus.bring_claude_front()
+        return focus.bring_claude_front()
 
     def claude_is_foreground(self):
         return self.focus_watch.claude_is_foreground()
@@ -144,6 +145,19 @@ class Pet:
         sender.setState_(0 if sender.state() else 1)
         self.settings['notify'] = bool(sender.state())
         save_settings(self.settings)
+
+    def toggleDnd_(self, sender):
+        # 勿扰模式（#11）：不弹横幅不响铃，气泡/表情照常
+        sender.setState_(0 if sender.state() else 1)
+        self.settings['dnd'] = bool(sender.state())
+        save_settings(self.settings)
+
+    def goHandle_(self, sender):
+        # 菜单「去处理」（#11）：聚焦终端；找不到窗口时气泡给出项目路径
+        if not focus.bring_claude_front():
+            self.text = (f'没找到终端窗口，项目在 {self.project}'
+                         if self.project else '没找到终端窗口')
+            self.state_since = time.time()
 
     def quit_(self, sender):
         NSApplication.sharedApplication().terminate_(None)
@@ -181,13 +195,17 @@ class Pet:
                     self.state, self.text = 'stone', '石化了…'
             else:
                 self.error_streak = 0
-            if mapped.sound and self.settings.get('sound', True) and self.last_mtime_seen:
+            if (mapped.sound and self.settings.get('sound', True)
+                    and not self.settings.get('dnd') and self.last_mtime_seen):
                 play_sound(os.path.join(SOUNDS, mapped.sound + '.wav'))
-            # 原生通知（#6）：长任务完成/出错/需要你看，状态切换时弹一次
-            if core_view_model.wants_notify(mapped.state, changed, self.settings):
+            # 原生通知（#6/#11）：长任务完成/出错/需要你看，状态切换时弹一次；
+            # 勿扰不弹不响、同一件事 2 秒内只弹一次、attention 自带铃声
+            if self.notify_gate.allow(mapped.state, mapped.text, mapped.session,
+                                      changed, self.settings, time.time()):
                 notify('Claude 桌宠',
                        core_view_model.notify_body(mapped.text, mapped.project,
-                                                   bool(self.settings.get('privacy'))))
+                                                   bool(self.settings.get('privacy'))),
+                       sound=core_view_model.notify_sound(mapped.state))
             if changed:
                 self.hop_at = time.time()
 

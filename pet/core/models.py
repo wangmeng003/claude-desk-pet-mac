@@ -47,3 +47,4 @@ class SessionState:
     text: str
     project: str
     sound: str | None  # None = 不播；否则是 SOUNDS 里的值
+    session: str = ''  # 会话 id（协议 v1）：原生通知的去重键用（#11）

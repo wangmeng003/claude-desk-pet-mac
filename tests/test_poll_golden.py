@@ -76,8 +76,7 @@ class TestPollMapping:
         assert pet.state == 'stone'
         write_session(sessions, 's1', {'state': 'thinking', 'text': '思考中'}, age=1)
         pet.poll()
-        assert pet.state == 'thinking'
-        assert pet.error_streak == 0
+        assert pet.state == 'thinking'  # 连击随会话状态重置（tracker 内部）
 
 
 @requires_platform
@@ -92,7 +91,7 @@ class TestSoundGating:
         return plays
 
     def test_first_poll_never_replays_old_sound(self, pet_state, monkeypatch):
-        """last_mtime_seen 为 0（首次 poll）时，即使文件带 sound 也不播。"""
+        """首见不播（tracker 的首见门，对齐旧版 last_mtime_seen 行为）：带 sound 也不重播。"""
         petmod, _tmp, sessions = pet_state
         plays = self._record_plays(petmod, monkeypatch)
         write_session(sessions, 's1', {'state': 'waiting', 'text': '', 'sound': 'done'}, age=10)

@@ -90,10 +90,7 @@ def make_pet():
     pet.text = '我来啦～'
     pet.project = ''
     pet.state_since = time.time()
-    pet.last_mtime = 0        # Windows 旧 poll 路径用（#23 移除）；mac 已走聚合器
-    pet.last_mtime_seen = 0
     pet.hop_at = time.time()
-    pet.error_streak = 0
     pet.settings = {'sound': True}
     pet.notify_gate = core_view_model.NotifyGate()
     pet.refresh = lambda: None  # 实例属性盖掉方法，渲染不执行

@@ -1,32 +1,10 @@
-# core：多会话扫描、主会话（最新）选择。只允许依赖 models/state_reader + stdlib。
+# core：会话目录的读取辅助。只允许依赖 models/state_reader + stdlib。
+# 多会话聚合（M3 #20）见 aggregate.py：collect+pick 取代了旧的 read_latest。
 import glob
 import os
 import time
 
 from . import state_reader
-
-
-def read_latest(sessions_dir, now: float | None = None):
-    """读所有会话里最新的状态；顺手清掉过期文件。
-
-    返回 (mtime, data) 或 None。坏文件跳过——和旧实现逐行为保持一致。
-    """
-    best = None
-    now = time.time() if now is None else now
-    for p in glob.glob(os.path.join(sessions_dir, '*.json')):
-        try:
-            mtime = os.path.getmtime(p)
-            if now - mtime > state_reader.EXPIRE_AFTER:
-                os.remove(p)
-                continue
-            data = state_reader.read_state_file(p)
-            if data is None:
-                continue
-            if best is None or mtime > best[0]:
-                best = (mtime, data)
-        except Exception:
-            continue
-    return best
 
 
 def has_live_session(sessions_dir, now: float | None = None) -> bool:

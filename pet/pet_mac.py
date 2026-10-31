@@ -91,11 +91,6 @@ def save_settings(s):
     core_state_reader.save_settings(SETTINGS, s)
 
 
-def read_latest():
-    """读所有会话里最新的状态；顺手清掉过期文件。"""
-    return core_sessions.read_latest(SESSIONS)
-
-
 class Pet:
     """应用控制器：持有状态与定时器驱动的 poll/tick/watch_* 编排。
 

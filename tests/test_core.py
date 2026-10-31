@@ -12,8 +12,7 @@ PET_DIR = REPO / 'pet'
 if str(PET_DIR) not in sys.path:
     sys.path.insert(0, str(PET_DIR))
 
-from conftest import write_session  # noqa: E402
-from core import cli_args, errors, models, sessions, state_reader, view_model  # noqa: E402
+from core import cli_args, errors, models, state_reader, view_model  # noqa: E402
 
 NOW = time.time()
 OLD = NOW - 700  # 超过 IDLE_AFTER（600s）
@@ -146,26 +145,6 @@ class TestStateReader:
         state_reader.save_settings(str(p), {'size': '大'})
         assert state_reader.load_settings(str(p)) == {'size': '小'}  # 旧值还在
         assert [f.name for f in tmp_path.iterdir()] == ['settings.json']  # 无临时文件残留
-
-
-class TestSessionsReadLatest:
-    def test_newest_and_expired(self, tmp_path):
-        sessions_dir = tmp_path / 'sessions'
-        sessions_dir.mkdir()
-        write_session(sessions_dir, 'old', {'state': 'tool', 'text': '旧'}, age=100)
-        expired = write_session(sessions_dir, 'stale', {'state': 'error'}, age=3 * 86400)
-        write_session(sessions_dir, 'new', {'state': 'waiting', 'text': '新'}, age=10)
-        found = sessions.read_latest(str(sessions_dir))
-        assert found is not None
-        _mtime, data = found
-        assert data['text'] == '新'
-        assert not expired.exists()
-
-    def test_all_corrupt_returns_none(self, tmp_path):
-        sessions_dir = tmp_path / 'sessions'
-        sessions_dir.mkdir()
-        write_session(sessions_dir, 'bad', raw='{{{')
-        assert sessions.read_latest(str(sessions_dir)) is None
 
 
 class TestCliArgs:

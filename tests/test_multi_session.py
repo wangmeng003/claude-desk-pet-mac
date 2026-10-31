@@ -1,7 +1,7 @@
-"""M3 #21 多会话 poll 行为：气泡计数、按会话通知、pin 切换、不闪烁（specs §5.3）。
+"""M3 多会话 poll 行为：气泡计数、按会话通知、pin 切换、不闪烁（specs §5.3）。
 
-聚合器/气泡组合是纯函数（任何平台可跑）；poll 集成测试走 mac 路径——
-Windows pet.pyw 在 #23 接入聚合器前仍是旧的 mtime 路径。
+聚合器/气泡组合是纯函数（任何平台可跑）；poll 集成测试双平台同跑
+（#23 起 Windows 也走聚合器），通知/声音记录按平台打桩。
 """
 import sys
 import time
@@ -12,12 +12,9 @@ PET_DIR = REPO / 'pet'
 if str(PET_DIR) not in sys.path:
     sys.path.insert(0, str(PET_DIR))
 
-import pytest  # noqa: E402
 
-from conftest import make_pet, pet_mac, write_session  # noqa: E402
+from conftest import make_pet, pet_mac, requires_platform, write_session  # noqa: E402
 from core import aggregate, view_model  # noqa: E402
-
-mac_only = pytest.mark.skipif(pet_mac is None, reason='M3 #23：Windows 未接聚合器')
 
 
 class TestBubbleText:
@@ -32,7 +29,35 @@ class TestBubbleText:
         assert view_model.bubble_text('在改 register.ts', 3, 2) == '在改 register.ts · 3 个会话 · 2 个等你'
 
 
-@mac_only
+def record_notify(petmod, monkeypatch):
+    """记录原生通知；mac 记 (title, body, sound)，Windows 的 Toast 无声参记 None。"""
+    calls = []
+    if pet_mac is not None and petmod is pet_mac:
+        monkeypatch.setattr(petmod, 'notify', lambda t, b, sound=False: calls.append((t, b, sound)))
+    else:
+        monkeypatch.setattr(petmod, 'toast', lambda t, b: calls.append((t, b, None)))
+        monkeypatch.setattr(petmod, 'flash_claude', lambda: None)
+    return calls
+
+
+def record_sound(petmod, monkeypatch):
+    plays = []
+    if pet_mac is not None and petmod is pet_mac:
+        monkeypatch.setattr(petmod, 'play_sound', lambda p: plays.append(p))
+    else:
+        monkeypatch.setattr(petmod.winsound, 'PlaySound', lambda p, f: plays.append(p))
+    return plays
+
+
+def force_focus(petmod, monkeypatch, ok: bool):
+    """打桩通用聚焦：mac 走 focus 模块，Windows 走 Pet.focus_claude。"""
+    if pet_mac is not None and petmod is pet_mac:
+        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: ok)
+    else:
+        monkeypatch.setattr(petmod.Pet, 'focus_claude', lambda self: ok)
+
+
+@requires_platform
 class TestPollMultiSession:
     def _write_three(self, sessions):
         """一个 working、一个 waiting、一个 error（M3 通过门槛场景）。"""
@@ -65,11 +90,9 @@ class TestPollMultiSession:
         assert pet.state_since == since
 
     def test_background_error_notifies_while_main_unchanged(self, pet_state, monkeypatch):
-        """后台会话出错也要通知（不丢），主会话不被抢（#21 核心）。"""
+        """后台会话出错也要通知（不丢），主会话不被抢（#21/#23 核心）。"""
         petmod, _tmp, sessions = pet_state
-        calls = []
-        monkeypatch.setattr(petmod, 'notify',
-                            lambda t, b, sound=False: calls.append((t, b, sound)))
+        calls = record_notify(petmod, monkeypatch)
         write_session(sessions, 'hot', {'state': 'attention', 'text': '需要你看一下',
                                         'project': 'a', 'session': 'hot'}, age=10)
         write_session(sessions, 'bg', {'state': 'thinking', 'text': '思考中',
@@ -105,8 +128,7 @@ class TestPollMultiSession:
     def test_single_sound_per_frame_picks_top(self, pet_state, monkeypatch):
         """两个会话同帧带声音：只播优先级最高的一条，不叠音。"""
         petmod, _tmp, sessions = pet_state
-        plays = []
-        monkeypatch.setattr(petmod, 'play_sound', lambda p: plays.append(p))
+        plays = record_sound(petmod, monkeypatch)
         write_session(sessions, 'a', {'state': 'waiting', 'text': '',
                                       'project': 'a', 'session': 'a'}, age=20)
         write_session(sessions, 'b', {'state': 'waiting', 'text': '',
@@ -137,7 +159,7 @@ class TestPollMultiSession:
 
 
 class TestSessionMenu:
-    """#22：菜单会话区数据（纯函数）——平台层只画 NSMenu/tkinter，不拼文案不排序。"""
+    """#22/#23：菜单会话区数据（纯函数）——平台层只画 NSMenu/tkinter，不拼文案不排序。"""
 
     def _state(self, state, ts, session='s', project='p', attention=None):
         data = {'state': state, 'session': session, 'ts': ts, 'project': project}
@@ -177,20 +199,28 @@ class TestSessionMenu:
         assert aggregate.session_entries([], '', now=0.0) == []
 
 
-@mac_only
+@requires_platform
 class TestPickSession:
-    """#22：菜单点击 → pin + 通用聚焦。"""
+    """#22/#23：菜单点击 → pin + 通用聚焦。"""
 
     class _Item:
+        """mac 的 NSMenuItem 替身（representedObject 带 session id）。"""
+
         def __init__(self, sid):
             self._sid = sid
 
         def representedObject(self):
             return self._sid
 
+    def _pick(self, pet, petmod, sid):
+        if pet_mac is not None and petmod is pet_mac:
+            pet.pickSession_(self._Item(sid))
+        else:
+            pet.pick_session(sid)
+
     def test_pick_pins_and_polls_immediately(self, pet_state, monkeypatch):
         petmod, _tmp, sessions = pet_state
-        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: True)
+        force_focus(petmod, monkeypatch, ok=True)
         write_session(sessions, 'hot', {'state': 'attention', 'text': '需要你看一下',
                                         'project': 'a', 'session': 'hot'}, age=3)
         write_session(sessions, 'work', {'state': 'tool', 'text': '在改 x.ts',
@@ -198,26 +228,26 @@ class TestPickSession:
         pet = make_pet()
         pet.poll()
         assert pet.state == 'attention'
-        pet.pickSession_(self._Item('work'))
+        self._pick(pet, petmod, 'work')
         assert pet.pinned == 'work'
         assert pet.state == 'tool' and pet.project == 'b'  # poll 已立即生效
 
     def test_pick_unknown_session_ignored(self, pet_state, monkeypatch):
         petmod, _tmp, sessions = pet_state
-        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: True)
+        force_focus(petmod, monkeypatch, ok=True)
         write_session(sessions, 'work', {'state': 'tool', 'text': '在改 x.ts',
                                          'project': 'b', 'session': 'work'}, age=2)
         pet = make_pet()
         pet.poll()
-        pet.pickSession_(self._Item('ghost'))
+        self._pick(pet, petmod, 'ghost')
         assert pet.pinned == ''
 
     def test_pick_focus_failure_shows_project_path(self, pet_state, monkeypatch):
         petmod, _tmp, sessions = pet_state
-        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: False)
+        force_focus(petmod, monkeypatch, ok=False)
         write_session(sessions, 'work', {'state': 'tool', 'text': '在改 x.ts',
                                          'project': 'b', 'session': 'work'}, age=2)
         pet = make_pet()
         pet.poll()
-        pet.pickSession_(self._Item('work'))
+        self._pick(pet, petmod, 'work')
         assert '没找到终端窗口' in pet.text and 'b' in pet.text

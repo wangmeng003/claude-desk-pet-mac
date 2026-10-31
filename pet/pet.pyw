@@ -19,8 +19,10 @@ from PIL import Image, ImageTk
 from core import cli_args
 from core import errors as core_errors
 from core import lock
+from core import aggregate as core_aggregate
 from core import sessions as core_sessions
 from core import state_reader as core_state_reader
+from core import tracker as core_tracker
 from core import view_model as core_view_model
 from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (build/菜单与测试直接用)
 
@@ -171,11 +173,6 @@ def save_settings(s):
     core_state_reader.save_settings(SETTINGS, s)
 
 
-def read_latest():
-    """读所有会话里最新的状态；顺手清掉过期文件。"""
-    return core_sessions.read_latest(SESSIONS)
-
-
 def prepare(path, height):
     """缩放立绘并把透明部分处理成透明色。"""
     im = Image.open(path).convert('RGBA')
@@ -316,14 +313,18 @@ class Pet:
 
         self.state, self.text, self.project = 'waiting', '我来啦～', ''
         self.state_since = time.time()
-        self.last_mtime = 0
-        self.last_mtime_seen = 0
         self.hop_at = time.time()
         self.hidden = False
-        self.error_streak = 0  # 连续 error 计数（石化彩蛋）
         self.drag = None
         self.last_alive = time.time()
         self.notify_gate = core_view_model.NotifyGate()
+        # 多会话聚合（M3 #23，与 mac 同一套 core 逻辑）
+        self.pinned = ''
+        self.total, self.waiting = 1, 0
+        self.tracker = core_tracker.SessionTracker()
+        self.last_states = []
+        self.main_session = ''
+        self.session_var = None  # make_menu 里换成真 StringVar（主会话单选）
         self.bubble_text = None
         self.bridge = None  # __main__ 起 mainloop 前 attach_bridge（#15）
         self.card_events = queue.SimpleQueue()  # HTTP 线程 → 主线程（只传事件）
@@ -337,7 +338,7 @@ class Pet:
         self.canvas.bind('<B1-Motion>', self.on_drag)
         self.canvas.bind('<ButtonRelease-1>', self.on_release)
         self.canvas.bind('<Double-Button-1>', self.on_double)
-        self.canvas.bind('<Button-3>', lambda e: self.menu.tk_popup(e.x_root, e.y_root))
+        self.canvas.bind('<Button-3>', self.on_right_click)
 
         self.poll()
         self.animate()
@@ -407,8 +408,9 @@ class Pet:
         self.bubble_text = tid
 
     def display_text(self):
-        return core_view_model.display_text(
+        base = core_view_model.display_text(
             self.state, self.text, time.time(), self.state_since)
+        return core_view_model.bubble_text(base, self.total, self.waiting)
 
     def effective_state(self):
         return core_view_model.effective_state(self.state, self.state_since, time.time())
@@ -422,6 +424,9 @@ class Pet:
 
     def make_menu(self):
         self.menu = tk.Menu(self.root, tearoff=0, font=self.font)
+        # 会话区（M3 #23）：单选变量 + 动态项计数，右键时按最近一帧重建
+        self.session_var = tk.StringVar(value='')
+        self._session_count = 0
         size_menu = tk.Menu(self.menu, tearoff=0, font=self.font)
         self.size_var = tk.StringVar(value=self.settings.get('size', '中'))
         for name in SIZES:
@@ -480,6 +485,44 @@ class Pet:
         if not self.focus_claude():
             self.text = (f'没找到终端窗口，项目在 {self.project}'
                          if self.project else '没找到终端窗口')
+            self.state_since = time.time()
+            self.draw_bubble()
+
+    def on_right_click(self, e):
+        self.rebuild_sessions()  # 会话区按最近一帧重建（M3 #23）
+        self.menu.tk_popup(e.x_root, e.y_root)
+
+    def rebuild_sessions(self):
+        """菜单会话区（M3 #23）：清旧项，按最近一帧 poll 的状态插到菜单最上面。
+
+        单会话也显示（与气泡计数不同：菜单是「都有谁在跑」的入口）；
+        没有活跃会话时整段不出现。文案/排序/勾选位来自 core.session_entries。
+        """
+        if self._session_count:
+            self.menu.delete(0, self._session_count)  # 闭区间：项 + 尾部分隔线
+            self._session_count = 0
+        entries = core_aggregate.session_entries(
+            self.last_states, self.main_session, time.time())
+        if not entries:
+            return
+        for i, (label, sid, _is_main) in enumerate(entries):
+            self.menu.insert_radiobutton(
+                i, label=label, value=sid, variable=self.session_var,
+                font=self.small, command=lambda s=sid: self.pick_session(s))
+        self.menu.insert_separator(len(entries))
+        self._session_count = len(entries)
+
+    def pick_session(self, sid):
+        # 菜单会话区点击（M3 #23）：pin 该会话当主会话（#19 口径）+ 通用聚焦；
+        # 不做逐会话窗口映射（协议不含 cwd/pid），聚焦失败给项目路径（沿 go_handle）
+        if any(s.session == sid for s in self.last_states):
+            self.pinned = sid
+        focused = self.focus_claude()
+        self.poll()  # pin 立即生效，不等下个 250ms tick
+        if not focused:  # poll 之后再写提示，不然本帧就把它冲掉
+            proj = next((s.project for s in self.last_states if s.session == sid), '')
+            self.text = (f'没找到终端窗口，项目在 {proj}'
+                         if proj else '没找到终端窗口')
             self.state_since = time.time()
             self.draw_bubble()
 
@@ -567,38 +610,46 @@ class Pet:
             self.bridge.decide(rid, decision, reason)
 
     def poll_once(self):
-        latest = read_latest()
-        if latest and latest[0] != self.last_mtime:
-            self.last_mtime_seen, self.last_mtime = self.last_mtime, latest[0]
-            mapped = core_view_model.normalize(latest[1])
-            changed = mapped.state != self.state
-            self.state, self.text = mapped.state, mapped.text
-            self.project = mapped.project
-            self.state_since = time.time()
-            # 石化彩蛋（协议 §3）：连续 3 次 error 由渲染层自己触发
-            if mapped.state == 'error':
-                self.error_streak += 1
-                if self.error_streak >= 3:
-                    self.state, self.text = 'stone', '石化了…'
-            else:
-                self.error_streak = 0
-            if (mapped.sound and self.sound_var.get() and not self.settings.get('dnd')
-                    and self.last_mtime_seen):  # 刚启动时不重播旧提示音
-                try:
-                    winsound.PlaySound(os.path.join(SOUNDS, mapped.sound + '.wav'),
-                                       winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-                except Exception:
-                    pass
-            # 原生通知（#6/#11）：长任务完成/出错/需要你看，状态切换时 Toast + 闪任务栏；
-            # 勿扰不弹不响（Toast 自带默认铃声）、同一件事 2 秒内只弹一次
-            if self.notify_gate.allow(mapped.state, mapped.text, mapped.session,
-                                      changed, self.settings, time.time()):
+        # 多会话聚合（M3 #23，specs/state.md §5）：与 mac 同一套 core 逻辑，
+        # 平台差异只剩声音（winsound）、通知（Toast+闪任务栏）和绘制时机
+        now = time.time()
+        states = core_aggregate.collect(SESSIONS, now)
+        self.last_states = states
+        if self.pinned and self.pinned not in {s.session for s in states}:
+            self.pinned = ''  # 被 pin 的会话过期/结束：回聚合主会话（#19 口径）
+        result = core_aggregate.pick(states, self.pinned)
+        if result.main is None:
+            self.tracker.reset()  # 没有活跃会话：画面保持，退出交给 watch_lifecycle
+            return
+        fx = self.tracker.apply(states, result.main)
+        counts_changed = (result.total, result.waiting) != (self.total, self.waiting)
+        # 只在显示变化时赋值：go_handle/pick_session 写进气泡的「没找到终端窗口，
+        # 项目在 x」要能活到下一个真实变化，不能每 250ms 被同一帧冲掉
+        if fx.reset_since:
+            self.state, self.text, self.project = fx.display_state, fx.display_text, fx.project
+            self.state_since = now
+            self.hop_at = now
+        self.total, self.waiting = result.total, result.waiting
+        if self.main_session != fx.main_session:
+            self.main_session = fx.main_session
+            if self.session_var is not None:
+                self.session_var.set(fx.main_session)  # 菜单单选跟随主会话
+        if fx.sound and self.sound_var.get() and not self.settings.get('dnd'):
+            try:
+                winsound.PlaySound(os.path.join(SOUNDS, fx.sound + '.wav'),
+                                   winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+            except Exception:
+                pass
+        # 原生通知（#6/#11）：按会话迁移触发——后台会话的 error/attention
+        # 不被主会话淹没；勿扰/开关/2 秒去重仍由 NotifyGate 把关
+        for ev in fx.notifies:
+            if self.notify_gate.allow(ev.state, ev.text, ev.session, True,
+                                      self.settings, now):
                 toast('Claude 桌宠',
-                      core_view_model.notify_body(mapped.text, mapped.project,
+                      core_view_model.notify_body(ev.text, ev.project,
                                                   bool(self.settings.get('privacy'))))
                 flash_claude()
-            if changed:
-                self.hop_at = time.time()
+        if fx.reset_since or counts_changed:
             self.set_sprite(self.effective_state())
             self.draw_bubble()
         elif self.effective_state() == 'idle':

@@ -8,6 +8,7 @@ import importlib
 import importlib.util
 import json
 import os
+import queue
 import sys
 import time
 from importlib.machinery import SourceFileLoader
@@ -90,6 +91,9 @@ def make_pet():
     pet.settings = {'sound': True}
     pet.notify_gate = core_view_model.NotifyGate()
     pet.refresh = lambda: None  # 实例属性盖掉方法，渲染不执行
+    pet.bridge = None  # 审批卡片接线（#15）：没 attach_bridge 时整条链路静默
+    pet.card = None
+    pet.card_events = queue.SimpleQueue()
     if pet_win is not None and petmod is pet_win:
         pet.canvas = _CanvasStub(pet)
         pet.root = _RootStub()  # Windows 版 poll() 末尾用 root.after 调度下一帧

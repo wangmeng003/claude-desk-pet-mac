@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- M2 #15：审批卡片 UI（specs/permission.md §5.5，macOS + Windows）+ 宠物 ↔ 桥接线：
+  - `pet/platforms/mac/card.py` / `pet.pyw` 内 `PermissionCard`：项目·工具/摘要/风险徽标/
+    展开命令/允许·拒绝·回退终端三键/倒计时；detail 只在卡片内存（可复制不可编辑），
+    关窗即丢，全程零落盘（测试锁定）；定高窗口（360×300），展开只是切 hidden
+  - 风险分级交互（#14 规则的消费端）：high=红色徽标「高危 · 破坏性操作」+ 默认焦点
+    「回退终端」+ 允许需点两次（首点变「确认放行？再点一次」）；Esc 永远=回退终端；
+    用户关卡片 = ask（不是 deny）；倒计时 600s，到点桥侧转 ask 并自动关卡片
+  - 接线：HTTP 线程只入队（`queue.SimpleQueue`），poll 定时器在主线程 drain——
+    弹卡/关卡/倒计时全部主线程，不做跨线程 AppKit 调用；桥侧结束（超时/退出）经
+    `on_settled` 通知宠物关掉匹配卡片；卡片窗口随桌宠常驻所有空间
+  - 退出修复：macOS 上 `stop:` 无后续事件时打不穿 `app.run()`（实测 macOS 27），
+    统一 `quit_app()`（stop + 空事件唤醒）；菜单退出/无会话自动退出原走 `terminate_`
+    = `exit(0)`，finally 不执行、bridge.json 泄漏、pending 无人回——全部改走 run() 返回
+    路径；SIGTERM 实测：pending → `{"decision":"ask","reason":"error"}`、bridge.json/
+    pet.lock 双清
+  - 测试：`tests/test_permission_flow.py` 8 项（入队→弹卡、忙时不双卡、决策回桥、
+    settled 只关匹配卡、无桥静默、detail 零落盘、倒计时文案、默认焦点）；E2E：
+    卡片窗口真弹出（CGWindowList 两窗）+ SIGTERM 优雅退出
 - M2 #12：权限客户端 `hooks/permission_client.mjs`（原生 PermissionRequest hook → bridge，
   specs §5.1/§7，ADR-0001）：零依赖 .mjs（Claude Code 自带 node，双平台同一条命令）；
   入参映射（prompt_id→id、description/command→summary、完整命令→detail、cwd basename→project、

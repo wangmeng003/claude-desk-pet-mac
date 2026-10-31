@@ -6,6 +6,7 @@ import ctypes
 import ctypes.wintypes as wt
 import math
 import os
+import queue
 import subprocess
 import sys
 import time
@@ -188,6 +189,115 @@ def prepare(path, height):
     return key.convert('RGB')
 
 
+class PermissionCard:
+    """权限审批卡片（#15，specs §5.5）：Toplevel + 三按钮 + 倒计时。detail 只在内存。"""
+
+    BADGE = {'high': ('高危 · 破坏性操作', '#d93025', '#ffe8e6'),
+             'medium': ('中风险', '#b06000', '#fff3d6')}
+
+    def __init__(self, pet, vm, deadline):
+        self.pet, self.vm, self.deadline = pet, vm, deadline
+        self._settled = False
+        self._armed = False  # 高风险 Allow 二次确认
+        top = self.top = tk.Toplevel(pet.root)
+        top.title('Claude 需要你确认')
+        top.attributes('-topmost', True)
+        top.resizable(False, False)
+        top.protocol('WM_DELETE_WINDOW', self.on_close)
+
+        head = tk.Frame(top, padx=14, pady=10)
+        head.pack(fill='x')
+        tk.Label(head, text='Claude 需要你确认', font=('Microsoft YaHei UI', 12, 'bold')
+                 ).pack(side='left')
+        self.time_label = tk.Label(head, text='', fg='#888')
+        self.time_label.pack(side='right')
+
+        meta = f'{vm.tool} · {vm.project}' if vm.project else vm.tool
+        tk.Label(top, text=meta, fg='#888', padx=14, anchor='w').pack(fill='x')
+        tk.Label(top, text=vm.summary, font=('Microsoft YaHei UI', 10),
+                 wraplength=320, justify='left', padx=14, anchor='w').pack(fill='x')
+        badge = self.BADGE.get(vm.risk)
+        if badge:
+            tk.Label(top, text=badge[0], fg=badge[1], bg=badge[2], padx=6).pack(anchor='w', padx=14)
+
+        self.toggle_btn = tk.Button(top, text='展开命令 ▸', relief='flat', command=self.toggle_detail)
+        self.toggle_btn.pack(anchor='w', padx=14)
+        self.detail = tk.Text(top, height=5, width=44, font=('Consolas', 9), state='disabled')
+        self.detail.insert('1.0', vm.detail or '（无详情）')
+        self.detail.configure(state='disabled')  # 只读可复制
+
+        row = tk.Frame(top, pady=10)
+        row.pack()
+        self.btn_allow = tk.Button(row, text='允许', width=10, command=self.on_allow)
+        self.btn_deny = tk.Button(row, text='拒绝', width=10, command=self.on_deny)
+        self.btn_defer = tk.Button(row, text='回退终端', width=12, command=self.on_defer)
+        self.btn_allow.pack(side='left', padx=4)
+        self.btn_deny.pack(side='left', padx=4)
+        self.btn_defer.pack(side='left', padx=4)
+
+        default = core_view_model.card_default_focus(vm.risk)
+        default_btn = self.btn_defer if default == 'defer' else self.btn_allow
+        default_btn.focus_set()
+        top.bind('<Return>', lambda e: default_btn.invoke())
+        top.bind('<Escape>', lambda e: self.btn_defer.invoke())
+        self.detail_open = False
+        self.tick()
+
+    def tick(self):
+        self.time_label.config(
+            text=core_view_model.card_countdown_text(self.deadline - time.time()))
+        if not self._settled:
+            self.top.after(500, self.tick)
+
+    def toggle_detail(self):
+        self.detail_open = not self.detail_open
+        if self.detail_open:
+            self.detail.pack(anchor='w', padx=14, before=self.toggle_btn.master)
+            # 展开区塞在 toggle 与按钮行之间：直接 pack 到 top 尾部也行，先按简单来
+            self.toggle_btn.config(text='收起命令 ▾')
+        else:
+            self.detail.pack_forget()
+            self.toggle_btn.config(text='展开命令 ▸')
+
+    def on_allow(self):
+        if self.vm.risk == 'high' and not self._armed:
+            self._armed = True
+            self.btn_allow.config(text='确认放行？再点一次')
+            return
+        self._settle('allow')
+
+    def on_deny(self):
+        self._settle('deny')
+
+    def on_defer(self):
+        self._settle('ask')
+
+    def on_close(self):
+        # 用户关卡片 = ask（不是 deny，spec §5.4）
+        self._settle('ask')
+
+    def settle_if_matching(self, rid):
+        """桥侧已结束（超时/退出）时由宠物调；匹配才关。"""
+        if rid == self.vm.id and not self._settled:
+            self._settled = True
+            self._close()
+            return True
+        return False
+
+    def _settle(self, decision):
+        if self._settled:
+            return
+        self._settled = True
+        self._close()
+        self.pet.permission_decide(self.vm.id, decision)
+
+    def _close(self):
+        try:
+            self.top.destroy()
+        except Exception:
+            pass
+
+
 class Pet:
     def __init__(self):
         self.settings = load_settings()
@@ -215,6 +325,9 @@ class Pet:
         self.last_alive = time.time()
         self.notify_gate = core_view_model.NotifyGate()
         self.bubble_text = None
+        self.bridge = None  # __main__ 起 mainloop 前 attach_bridge（#15）
+        self.card_events = queue.SimpleQueue()  # HTTP 线程 → 主线程（只传事件）
+        self.card = None
 
         self.build()
         self.place_window()
@@ -417,7 +530,41 @@ class Pet:
         except Exception:
             self.log_error()
         finally:
+            self.drain_card_events()
             self.schedule(250, self.poll)
+
+    # ---------- 权限审批卡片（#15）----------
+    def attach_bridge(self, server) -> None:
+        self.bridge = server
+
+    def permission_incoming(self, vm) -> None:
+        """bridge on_request（HTTP 线程）：只入队，UI 只在主线程碰。"""
+        self.card_events.put(('request', vm))
+
+    def permission_settled(self, rid, decision, reason) -> None:
+        """bridge on_settled（HTTP 线程）：桥侧已结束（超时/退出），关匹配卡片。"""
+        self.card_events.put(('settled', rid))
+
+    def drain_card_events(self) -> None:
+        if self.bridge is None:
+            return
+        while True:
+            try:
+                kind, payload = self.card_events.get_nowait()
+            except queue.Empty:
+                return
+            if kind == 'request':
+                if self.card is None:  # 忙时 bridge 已 409，到不了这；防御只弹一张
+                    self.card = PermissionCard(self, payload,
+                                               time.time() + core_view_model.CARD_TIMEOUT)
+            elif self.card is not None and self.card.settle_if_matching(payload):
+                self.card = None
+
+    def permission_decide(self, rid, decision, reason='user') -> None:
+        """卡片按钮/关窗 → 桥的决策；卡片自己已关。"""
+        self.card = None
+        if self.bridge is not None:
+            self.bridge.decide(rid, decision, reason)
 
     def poll_once(self):
         latest = read_latest()
@@ -515,9 +662,20 @@ class Pet:
 if __name__ == '__main__':
     if _SHOT_PATH is None:  # --shot 是诊断/测试路径，不参与抢锁
         acquire_lock(QUIET)
+    server = None
     try:
-        Pet().root.mainloop()
+        pet = Pet()
+        if _SHOT_PATH is None:  # 审批桥随真桌宠起停（#13/#15）
+            from bridge.server import BridgeServer
+            server = BridgeServer(RUN_DIR, on_request=pet.permission_incoming,
+                                  on_settled=pet.permission_settled)
+            server.start()
+            pet.attach_bridge(server)
+        pet.root.mainloop()
     except Exception:
         import traceback
         with open(os.path.join(RUN_DIR, 'pet-error.log'), 'w', encoding='utf-8') as f:
             traceback.print_exc(file=f)
+    finally:
+        if server is not None:
+            server.stop()  # pending 全转 ask + 删 bridge.json

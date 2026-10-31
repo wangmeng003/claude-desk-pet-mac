@@ -4,11 +4,14 @@
 # 用法：python pet_mac.py <运行目录>
 import atexit
 import os
+import queue
+import signal
 import subprocess
 import sys
 import time
 
-from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory, NSEvent,
+                    NSEventTypeApplicationDefined, NSMakePoint)
 from Foundation import NSTimer
 
 from core import cli_args
@@ -19,6 +22,7 @@ from core import state_reader as core_state_reader
 from core import view_model as core_view_model
 from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (测试从入口锁定契约)
 from platforms.mac import focus
+from platforms.mac import card as mac_card
 from platforms.mac import window as mac_window
 from platforms.mac.menu import PetMenu
 from platforms.mac.notify import notify, play_sound
@@ -34,6 +38,20 @@ QUIET = '--quiet' in sys.argv[1:]  # 被 hooks 自动拉起：单实例冲突只
 # 只允许开一个桌宠：占住一个本地端口，占不到说明已经有一个在跑
 # （在 acquire_lock() 里做，保持 import 本模块无副作用，测试才能导入）
 _lock = None
+
+
+def quit_app():
+    """所有退出路径的统一入口：让 app.run() 返回，main() 的 finally 才有机会停桥。
+
+    stop: 只在处理完「下一个事件」后生效，无事件时 run loop 永远等下去（macOS 27
+    上实测如此）——补发一个空事件把它唤醒。terminate_ 走 exit(0)，finally 不会执行，
+    bridge.json 会泄漏、pending 请求没人回，不能用。
+    """
+    app = NSApplication.sharedApplication()
+    app.stop_(None)
+    ev = NSEvent.otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode_(
+        NSEventTypeApplicationDefined, NSMakePoint(0, 0), 0, 0.0, 0, None, '', '', False, 0)
+    app.postEvent_atStart_(ev, True)
 
 
 def report_and_exit(msg, code, quiet):
@@ -94,6 +112,9 @@ class Pet:
         self.last_alive = time.time()
         self.notify_gate = core_view_model.NotifyGate()
         self.focus_watch = focus.ForegroundWatch()
+        self.bridge = None  # main() 里 attach_bridge 后才有（#15）
+        self.card_events = queue.SimpleQueue()  # HTTP 线程 → 主线程（只传事件，不碰 AppKit）
+        self.card = None
 
         self.window = mac_window.PetWindow(self, os.path.join(HERE, 'sprites'), RUN_DIR)
         self.view = self.window.view
@@ -160,7 +181,7 @@ class Pet:
             self.state_since = time.time()
 
     def quit_(self, sender):
-        NSApplication.sharedApplication().terminate_(None)
+        quit_app()
 
     # ---------- 状态 ----------
     def display_text(self):
@@ -177,6 +198,7 @@ class Pet:
         except Exception:
             core_errors.log_exception(RUN_DIR)
         finally:
+            self.drain_card_events()
             self.refresh()
 
     def poll_once(self):
@@ -210,8 +232,53 @@ class Pet:
                 self.hop_at = time.time()
 
     def tick(self):
-        # 33ms 动画帧 + “思考中”点点点
+        # 33ms 动画帧 + “思考中”点点点 + 卡片倒计时
+        if self.card is not None:
+            self.card.tick(time.time())
         self.refresh()
+
+    # ---------- 权限审批卡片（#15）----------
+    def attach_bridge(self, server) -> None:
+        """main() 起桥后注入；测试不调它就整条链路静默关闭。"""
+        self.bridge = server
+
+    def permission_incoming(self, vm) -> None:
+        """bridge on_request 回调（HTTP 线程）：只入队，AppKit 只在主线程碰。"""
+        self.card_events.put(('request', vm))
+
+    def permission_settled(self, rid: str, decision: str, reason: str) -> None:
+        """bridge on_settled 回调（HTTP 线程）：桥侧已结束（超时/退出），关匹配的卡片。"""
+        self.card_events.put(('settled', rid))
+
+    def drain_card_events(self) -> None:
+        if self.bridge is None:
+            return
+        while True:
+            try:
+                kind, payload = self.card_events.get_nowait()
+            except queue.Empty:
+                return
+            if kind == 'request':
+                if self.card is None:  # 忙时 bridge 已 409，不会到这；防御只弹一张
+                    self.card = mac_card.PermissionCard(
+                        self, payload, time.time() + core_view_model.CARD_TIMEOUT)
+                    self.card.show(self._card_origin())
+            elif self.card is not None and self.card.settle_if_matching(payload):
+                self.card = None
+
+    def permission_decide(self, rid: str, decision: str, reason: str = 'user') -> None:
+        """卡片按钮/关窗 → 桥的决策；卡片自己已关。"""
+        self.card = None
+        if self.bridge is not None:
+            self.bridge.decide(rid, decision, reason)
+
+    def _card_origin(self):
+        """卡片落在宠物上方；窗口不在（测试形态）就给 None 用默认位置。"""
+        try:
+            f = self.window.win.frame()
+            return (f.origin.x, f.origin.y + f.size.height + 8)
+        except Exception:
+            return None
 
     def watch_focus(self):
         should_hide = (self.settings.get('hideOnFocus')
@@ -230,7 +297,7 @@ class Pet:
         if core_sessions.has_live_session(SESSIONS):
             self.last_alive = time.time()
         elif time.time() - self.last_alive > 120:
-            NSApplication.sharedApplication().terminate_(None)
+            quit_app()  # 也走 run() 返回路径：finally 停桥再退
             return
 
 
@@ -246,16 +313,29 @@ def main():
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)  # 不占 Dock
     pet = Pet()
-    if SHOT_PATH is not None:  # --shot <路径>：画几帧后截图退出
-        if not SHOT_PATH:
-            sys.exit('--shot 需要一个输出路径，例如：pet_mac.py --shot /tmp/pet.png')
-        NSTimer.scheduledTimerWithTimeInterval_repeats_block_(1.5, False,
-                                                              lambda t: shoot(pet, SHOT_PATH))
-    NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.25, True, lambda t: pet.poll())
-    NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.033, True, lambda t: pet.tick())
-    NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.3, True, lambda t: pet.watch_focus())
-    NSTimer.scheduledTimerWithTimeInterval_repeats_block_(30, True, lambda t: pet.watch_lifecycle())
-    app.run()
+    server = None
+    if SHOT_PATH is None:  # 审批桥随真桌宠起停（#13/#15）；--shot 诊断路径不起桥
+        from bridge.server import BridgeServer
+        server = BridgeServer(RUN_DIR, on_request=pet.permission_incoming,
+                              on_settled=pet.permission_settled)
+        server.start()
+        pet.attach_bridge(server)
+    try:
+        # SIGTERM 走正常退出路径：run() 返回 → finally 停桥（pending 转 ask + 删 bridge.json）
+        signal.signal(signal.SIGTERM, lambda _s, _f: quit_app())
+        if SHOT_PATH is not None:  # --shot <路径>：画几帧后截图退出
+            if not SHOT_PATH:
+                sys.exit('--shot 需要一个输出路径，例如：pet_mac.py --shot /tmp/pet.png')
+            NSTimer.scheduledTimerWithTimeInterval_repeats_block_(1.5, False,
+                                                                  lambda t: shoot(pet, SHOT_PATH))
+        NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.25, True, lambda t: pet.poll())
+        NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.033, True, lambda t: pet.tick())
+        NSTimer.scheduledTimerWithTimeInterval_repeats_block_(0.3, True, lambda t: pet.watch_focus())
+        NSTimer.scheduledTimerWithTimeInterval_repeats_block_(30, True, lambda t: pet.watch_lifecycle())
+        app.run()
+    finally:
+        if server is not None:
+            server.stop()  # pending 全转 ask + 删 bridge.json（#13）
 
 
 def write_error_log():

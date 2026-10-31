@@ -116,3 +116,21 @@ def notify_body(text: str, project: str, privacy: bool) -> str:
     """
     head = f'{text} · {project}' if (project and not privacy) else text
     return f'{head}（双击桌宠回到终端）'
+
+
+# ---------- 审批卡片（#15，specs/permission.md §5.5） ----------
+
+CARD_TIMEOUT = 600.0  # 与 bridge gate 同步；超时由 gate 转 ask，卡片只展示剩余时间
+
+
+def card_countdown_text(remaining: float) -> str:
+    """剩余秒数 → mm:ss；到点显示等待回退。"""
+    if remaining <= 0:
+        return '已超时，回退终端…'
+    m, s = divmod(int(remaining), 60)
+    return f'{m:02d}:{s:02d}'
+
+
+def card_default_focus(risk: str) -> str:
+    """默认焦点/回车键（§5.5）：高风险默认「回退终端」，低风险默认「允许」。"""
+    return 'defer' if risk == 'high' else 'allow'

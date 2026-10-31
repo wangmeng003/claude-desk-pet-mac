@@ -157,6 +157,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._reply(500, {'decision': 'ask', 'reason': 'error'})
             return
         decision, reason = self._bridge.gate.wait(vm.id)
+        settled = self._bridge.on_settled
+        if settled is not None:
+            try:
+                settled(vm.id, decision, reason)  # 让宠物在超时/退出时关掉卡片
+            except Exception:
+                pass
         self._reply(200, {'decision': decision, 'reason': reason})
 
 
@@ -165,10 +171,12 @@ class BridgeServer:
 
     def __init__(self, run_dir: str,
                  on_request: Callable[[PermissionRequestViewModel], object],
-                 timeout: float = 600.0) -> None:
+                 timeout: float = 600.0,
+                 on_settled: Callable[[str, str, str], object] | None = None) -> None:
         self.gate = bridge_permission.PermissionGate(timeout=timeout)
         self.token = secrets.token_urlsafe(32)
         self.on_request = on_request  # renderer 入口：收 PermissionRequestViewModel
+        self.on_settled = on_settled  # wait 结束（含超时/fail_all）后的通知，异常吞掉
         self._server = _Server(self)
         self.port = self._server.server_address[1]
         self._path = os.path.join(run_dir, BRIDGE_JSON)

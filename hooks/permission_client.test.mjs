@@ -48,6 +48,28 @@ test('buildRequest：截断与非法输入', () => {
   assert.equal(buildRequest({ session_id: 's', tool_input: {} }), null); // 缺摘要
 });
 
+test('buildRequest：Write/Edit 族用文件名兜底摘要', () => {
+  const req = buildRequest({
+    session_id: 's', tool_name: 'Write',
+    tool_input: { file_path: '/Users/dev/demo/src/main.py', content: 'print(1)' },
+  }, { readSettings: () => null });
+  assert.equal(req.summary, '编辑 main.py');
+  assert.equal(req.detail, '/Users/dev/demo/src/main.py'); // 完整路径进 detail（仅卡片内存）
+  assert.equal(req.id, 's|Write|编辑 main.py');
+
+  // Windows 反斜杠路径同样取到 basename
+  const win = buildRequest({
+    session_id: 's', tool_name: 'Edit',
+    tool_input: { file_path: 'C:\\dev\\demo\\app.ts' },
+  }, { readSettings: () => null });
+  assert.equal(win.summary, '编辑 app.ts');
+
+  // 既无 command 又无 file_path 的工具 → 不凑卡片，回退终端
+  assert.equal(buildRequest({
+    session_id: 's', tool_name: 'WebFetch', tool_input: { url: 'https://x' },
+  }, { readSettings: () => null }), null);
+});
+
 test('buildRequest：隐私模式不带项目名', () => {
   const req = buildRequest(INPUT, { readSettings: () => '{"privacy": true}' });
   assert.equal(req.project, '');

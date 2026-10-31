@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- M2 #12 收尾：权限 hook 随插件自动注册（此前 README 要求手动编辑 `~/.claude/settings.json`，
+  实际装了插件也没有审批链路）：
+  - `hooks/hooks.json` 增加 `hooks` 键声明 `PermissionRequest` hook——实测（claude 2.1.316，
+    `--plugin-dir` 探针插件）该键与 mods 的 `modules` 键在同一文件共存互不干扰；manifest
+    `hooks` 字段指向单独文件的方案不生效，已排除
+  - exec form（`command:"node"` + `args:["${CLAUDE_PLUGIN_ROOT}/hooks/permission_client.mjs"]`）：
+    不走 shell，Windows 上绕开默认 PowerShell 的引号/转义面（ADR-0001 标记的重点回归风险）；
+    省略 matcher → 所有工具触发；`timeout: 620` > 客户端 HTTP 610s > 桥决策 600s
+  - 客户端补 Write/Edit 族映射：`tool_input.file_path` 兜底摘要（`编辑 main.py`，basename
+    兼容双平台分隔符）、完整路径进 detail；此前 Write/Edit 权限请求凑不齐 summary 会静默
+    回退终端，卡片「时灵时不灵」
+  - 新增 `hooks/native_hooks.test.mjs` 锁声明契约（exec form/无 matcher/超时链/脚本存在）；
+    客户端测试补 3 例（Write 映射、Windows 路径 basename、WebFetch 无映射回退）
+  - README 手动配置段改为自动注册说明；版本 0.1.3 → 0.2.0
+
+
 - M2 #15：审批卡片 UI（specs/permission.md §5.5，macOS + Windows）+ 宠物 ↔ 桥接线：
   - `pet/platforms/mac/card.py` / `pet.pyw` 内 `PermissionCard`：项目·工具/摘要/风险徽标/
     展开命令/允许·拒绝·回退终端三键/倒计时；detail 只在卡片内存（可复制不可编辑），

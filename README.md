@@ -35,27 +35,13 @@
 命令详情可展开（只在卡片内存，不落盘），Esc = 回退终端，关掉卡片或 10 分钟倒计时到点
 同样回退终端。任何一环失败（桌宠挂了、超时、坏数据）都回退终端原生提示，**绝不自动放行**。
 
-需要把原生 `PermissionRequest` hook 指到客户端脚本（`hooks/permission_client.mjs`，零依赖，
-用 Claude Code 自带的 node 运行），在 `~/.claude/settings.json` 里加：
+0.2.0 起 `PermissionRequest` hook 随插件自动注册（`hooks/hooks.json` 内置声明，exec form
+直接调 node，不走 shell，Windows 上也避开 PowerShell 引号问题），**无需手动配置**。
+桌宠没在跑时客户端立即输出空 `{}`，每次权限请求只多一次 node 启动（~50ms），照常走终端
+原生提示。
 
-```json
-{
-  "hooks": {
-    "PermissionRequest": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node <插件目录>/hooks/permission_client.mjs",
-            "timeout": 620
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+注意：同一事件配置多个 hook 时**第一个返回决策的获胜**——如果你已有会返回 allow/deny 的
+权限 hook，桌宠卡片可能永远等不到请求；桌宠客户端无桥可连时输出空 `{}`，不占别人的决策位。
 
 注意：同一事件配置多个 hook 时**第一个返回决策的获胜**——如果你已有会返回 allow/deny 的
 权限 hook，桌宠卡片可能永远等不到请求；桌宠客户端无桥可连时输出空 `{}`，不占别人的决策位。

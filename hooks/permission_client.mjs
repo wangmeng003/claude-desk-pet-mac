@@ -25,10 +25,13 @@ export function buildRequest(input, deps = {}) {
   const tool = typeof input.tool_name === 'string' ? input.tool_name : '';
   const ti = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const command = typeof ti.command === 'string' ? ti.command : '';
+  const filePath = typeof ti.file_path === 'string' ? ti.file_path : '';
+  // Write/Edit 族没有 command：用文件名兜底摘要（分隔符兼容双平台路径）
+  const fileBase = filePath ? filePath.split(/[\\/]/).pop() : '';
   const summary = clip(typeof ti.description === 'string' && ti.description
-    ? ti.description : command, 200);
+    ? ti.description : (command || (fileBase ? `编辑 ${fileBase}` : '')), 200);
   if (!session || !tool || !summary) return null;
-  const detail = clip(command || JSON.stringify(ti), 8192);
+  const detail = clip(command || filePath || JSON.stringify(ti), 8192);
   const id = (typeof input.prompt_id === 'string' && input.prompt_id)
     || `${session}|${tool}|${summary}`; // 无 prompt_id 时用内容兜底，模型重试可撞上桥的去重
   return {

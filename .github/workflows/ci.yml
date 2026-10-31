@@ -56,4 +56,4 @@ jobs:
       # 且 --test 的目录参数在 22 上会把目录当模块加载（MODULE_NOT_FOUND），
       # 用 shell glob 展开成显式文件列表，22/26 行为一致
       - name: hooks 单测（node:test）
-        run: node --test --experimental-strip-types hooks/*.test.ts
+        run: node --test --experimental-strip-types hooks/*.test.ts hooks/*.test.mjs

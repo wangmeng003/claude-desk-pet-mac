@@ -30,6 +30,35 @@
 
 **🔔 提示音**：回复完播放钢琴"叮咚"，出错播放复古 RPG"哔哔"
 
+**🪪 权限审批卡片（实验性）**：Claude 请求权限时，桌宠弹单请求卡片——项目、工具、摘要、
+风险徽标（`rm -rf`/`sudo` 等高危命令红色警告 + 二次确认），Allow / Deny / 回退终端三选一。
+任何一环失败（桌宠挂了、超时、坏数据）都回退终端原生提示，**绝不自动放行**。
+
+需要把原生 `PermissionRequest` hook 指到客户端脚本（`hooks/permission_client.mjs`，零依赖，
+用 Claude Code 自带的 node 运行），在 `~/.claude/settings.json` 里加：
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <插件目录>/hooks/permission_client.mjs",
+            "timeout": 620
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+注意：同一事件配置多个 hook 时**第一个返回决策的获胜**——如果你已有会返回 allow/deny 的
+权限 hook，桌宠卡片可能永远等不到请求；桌宠客户端无桥可连时输出空 `{}`，不占别人的决策位。
+
 **命令**
 
 - `/token-stats`：查看本会话和本项目累计的 token 用量、缓存命中率、额度

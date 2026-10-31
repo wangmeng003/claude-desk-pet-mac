@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- M2 #12：权限客户端 `hooks/permission_client.mjs`（原生 PermissionRequest hook → bridge，
+  specs §5.1/§7，ADR-0001）：零依赖 .mjs（Claude Code 自带 node，双平台同一条命令）；
+  入参映射（prompt_id→id、description/command→summary、完整命令→detail、cwd basename→project、
+  隐私模式不带项目名）；bridge.json 缺失/坏 JSON/pid 死/HTTP 失败/非 2xx/超时 → 一律输出
+  无决策空 `{}`（回退终端原生提示，不占其他 hook 的决策位）；只有 bridge 的 allow/deny
+  才产生真决策；绝不自动 allow、不缓存 allow、被超时杀掉=进程死即 fail-open；debug 日志只记
+  错误类别不落命令内容。CI hooks 单测收编 `*.test.mjs`。真实 claude 矩阵 5/5：allow 执行 /
+  deny 拦截且消息传给模型 / 桥被杀（死 pid 识破）/ 无 bridge.json / hook 超时 15s 杀掉——
+  全部零误放行
 - M2 #13：权限审批桥（specs/permission.md §5.2-5.4）：
   - `pet/bridge/permission.py` 状态机 idle → pending → allowed/denied/ask：
     同一时刻一个请求（忙时 409 不排队）、重复 id 409、超时 600s 转 ask、

@@ -1,5 +1,6 @@
 # Claude 娘桌宠悬浮窗
-# mod 把每个会话的状态写进 <运行目录>/sessions/<会话id>.json，这里读最新的那个来换表情和气泡。
+# mod 把每个会话的状态写进 <运行目录>/sessions/<会话id>.json，这里聚合全部活跃
+# 会话（M3：优先级选主，specs/state.md §5）来换表情和气泡。
 # 用法：pythonw pet.pyw <运行目录>
 import atexit
 import ctypes

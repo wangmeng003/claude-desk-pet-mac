@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- M3 #20–#23 多会话（specs/state.md §5，双平台）：
+  - 聚合器纯函数 `core/aggregate.py`：`collect`（TTL 过滤/未来 ts 跳过/坏 JSON 跳过/
+    session 缺失用文件名补/顺手清两天前旧文件）+ `pick`（排序键 `(attention, priority,
+    ts, session)`，确定性 tie-break）+ 计数；取代旧 `read_latest` 的「按 mtime 挑最新」
+    ——任一会话出错/需要你都能当上主会话，不再被最新写入的文件淹没
+  - `SessionState` 补 `ts`/`attention`（normalize 读取；attention 缺省按状态推导，
+    显式字段覆盖）；`PRIORITY` 表进 models（specs §3）
+  - 帧逻辑收进 `core/tracker.py`（双平台共用，不复制判断）：事件=ts 变化（石化连击/
+    提示音按事件），状态迁移=state 变化（通知按迁移，首见算迁移）；首见不播声音
+    （对齐旧版不重播历史提示音）；同帧多会话带声音只播优先级最高一条
+  - 通知/提示音/石化彩蛋按会话跟踪：后台会话的 error/attention 照常通知不丢，
+    但不抢主会话的屏；石化只上主会话的份（后台连击只记账）
+  - 气泡多会话计数：`text · N 个会话 · M 个等你`（单会话与旧版逐字节一致）；
+    显示只在变化时赋值——菜单写入气泡的「没找到终端窗口，项目在 x」不会被下一帧冲掉
+  - 菜单会话区（mac NSMenu / Windows tkinter）：popup 前按最近一帧重建，文案/排序/
+    勾选位来自 `session_entries` 纯函数（`项目 · 状态短词 · N 分钟前`，隐私模式回退
+    短 id）；点击 = pin 该会话（存活期间一直当主会话，过期自动解除，#19 口径）+
+    通用聚焦（不做逐会话窗口映射），失败给项目路径
+  - 菜单时长口径偏离 spec 原文：显示「距上次动静」（now − ts）而非「已运行时长」——
+    协议无 started_at，且「卡了多久」更可操作；已在 specs/state.md §5.3 落档
+  - 清理：`read_latest` 双平台删除（被聚合器取代），相关 golden 测试由
+    test_aggregate.py 接棒；测试夹具 write_session 自动补协议必填的 ts
 - M2 #12 收尾：权限 hook 随插件自动注册（此前 README 要求手动编辑 `~/.claude/settings.json`，
   实际装了插件也没有审批链路）：
   - `hooks/hooks.json` 增加 `hooks` 键声明 `PermissionRequest` hook——实测（claude 2.1.316，

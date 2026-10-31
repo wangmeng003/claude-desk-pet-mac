@@ -97,13 +97,14 @@ def make_pet():
     pet.bridge = None  # 审批卡片接线（#15）：没 attach_bridge 时整条链路静默
     pet.card = None
     pet.card_events = queue.SimpleQueue()
-    # 多会话聚合（M3 #21，mac 路径；Windows #23 接入前多余无害）
+    # 多会话聚合（M3 #21/#23，双平台 poll 路径都要的字段）
     from core import tracker as core_tracker
     pet.pinned = ''
     pet.total, pet.waiting = 1, 0
     pet.tracker = core_tracker.SessionTracker()
     pet.last_states = []
     pet.main_session = ''
+    pet.session_var = None  # Windows 菜单单选变量（真实例在 make_menu 里建）
     if pet_win is not None and petmod is pet_win:
         pet.canvas = _CanvasStub(pet)
         pet.root = _RootStub()  # Windows 版 poll() 末尾用 root.after 调度下一帧

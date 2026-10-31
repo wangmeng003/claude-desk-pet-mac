@@ -106,6 +106,7 @@ def make_pet():
     pet.total, pet.waiting = 1, 0
     pet.tracker = core_tracker.SessionTracker()
     pet.last_states = []
+    pet.main_session = ''
     if pet_win is not None and petmod is pet_win:
         pet.canvas = _CanvasStub(pet)
         pet.root = _RootStub()  # Windows 版 poll() 末尾用 root.after 调度下一帧

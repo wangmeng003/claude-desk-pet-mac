@@ -156,6 +156,9 @@ class PetView(NSView):
     def goHandle_(self, sender):
         self.pet.goHandle_(sender)
 
+    def pickSession_(self, sender):
+        self.pet.pickSession_(sender)
+
     def quit_(self, sender):
         self.pet.quit_(sender)
 

@@ -112,11 +112,12 @@ class Pet:
         self.notify_gate = core_view_model.NotifyGate()
         self.focus_watch = focus.ForegroundWatch()
         # 多会话聚合（M3 #21）：pinned 是用户点菜单选的主会话（#22 接菜单）；
-        # total/waiting 是气泡计数；last_states 供菜单重建（#22）
+        # total/waiting 是气泡计数；last_states/main_session 供菜单重建（#22）
         self.pinned = ''
         self.total, self.waiting = 1, 0
         self.tracker = core_tracker.SessionTracker()
         self.last_states = []
+        self.main_session = ''
         self.bridge = None  # main() 里 attach_bridge 后才有（#15）
         self.card_events = queue.SimpleQueue()  # HTTP 线程 → 主线程（只传事件，不碰 AppKit）
         self.card = None
@@ -185,6 +186,20 @@ class Pet:
                          if self.project else '没找到终端窗口')
             self.state_since = time.time()
 
+    def pickSession_(self, sender):
+        # 菜单会话区点击（M3 #22）：pin 该会话当主会话（#19 口径）+ 通用聚焦；
+        # 不做逐会话窗口映射（协议不含 cwd/pid），聚焦失败给项目路径（沿 goHandle）
+        sid = str(sender.representedObject() or '')
+        if sid and any(s.session == sid for s in self.last_states):
+            self.pinned = sid
+        focused = focus.bring_claude_front()
+        self.poll()  # pin 立即生效，不等下个 250ms tick
+        if not focused:  # poll 之后再写提示，不然本帧就把它冲掉
+            proj = next((s.project for s in self.last_states if s.session == sid), '')
+            self.text = (f'没找到终端窗口，项目在 {proj}'
+                         if proj else '没找到终端窗口')
+            self.state_since = time.time()
+
     def quit_(self, sender):
         quit_app()
 
@@ -220,11 +235,14 @@ class Pet:
             self.tracker.reset()  # 没有活跃会话：画面保持，退出交给 watch_lifecycle
             return
         fx = self.tracker.apply(states, result.main)
-        self.state, self.text, self.project = fx.display_state, fx.display_text, fx.project
-        self.total, self.waiting = result.total, result.waiting
+        # 只在显示变化时赋值：goHandle_/pickSession_ 写进气泡的「没找到终端窗口，
+        # 项目在 x」要能活到下一个真实变化，不能每 250ms 被同一帧冲掉
         if fx.reset_since:
+            self.state, self.text, self.project = fx.display_state, fx.display_text, fx.project
             self.state_since = now
             self.hop_at = now
+        self.total, self.waiting = result.total, result.waiting
+        self.main_session = fx.main_session
         if fx.sound and self.settings.get('sound', True) and not self.settings.get('dnd'):
             play_sound(os.path.join(SOUNDS, fx.sound + '.wav'))
         # 原生通知（#6/#11）：按会话迁移触发——后台会话的 error/attention

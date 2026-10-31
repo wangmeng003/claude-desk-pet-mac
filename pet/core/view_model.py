@@ -157,3 +157,39 @@ def card_countdown_text(remaining: float) -> str:
 def card_default_focus(risk: str) -> str:
     """默认焦点/回车键（§5.5）：高风险默认「回退终端」，低风险默认「允许」。"""
     return 'defer' if risk == 'high' else 'allow'
+
+
+# ---------- 会话菜单（M3 #22，specs/state.md §5.3） ----------
+
+# 状态短词：菜单一行放不下气泡全文，用固定短词 + 距上次动静表达「谁在干嘛/卡没卡」。
+STATE_LABELS = {
+    'idle': '闲着',
+    'thinking': '思考中',
+    'tool': '在跑工具',
+    'reading': '在读',
+    'waiting': '等你',
+    'attention': '要你看',
+    'celebrate': '完成',
+    'error': '出错',
+}
+
+
+def minutes_ago(ts: float, now: float) -> str:
+    """距上次动静：'刚刚' / 'N 分钟前' / 'N 小时（M 分）前'。
+
+    #19 口径：菜单显示距上次事件的时间（now − ts）而非「已运行时长」——
+    协议没有 started_at，且「卡了多久」比「开了多久」更可操作。
+    """
+    m = max(0, int((now - ts) // 60))
+    if m < 1:
+        return '刚刚'
+    if m < 60:
+        return f'{m} 分钟前'
+    h, rest = divmod(m, 60)
+    return f'{h} 小时 {rest} 分前' if rest else f'{h} 小时前'
+
+
+def session_label(s: models.SessionState, now: float) -> str:
+    """菜单一项的文案：项目 · 状态短词 · 距上次动静。"""
+    name = s.project or f'会话 {s.session[-4:]}'  # 隐私模式项目名为空，用短 id 区分
+    return f'{name} · {STATE_LABELS[s.state]} · {minutes_ago(s.ts, now)}'

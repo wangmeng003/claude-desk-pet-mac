@@ -15,7 +15,7 @@ if str(PET_DIR) not in sys.path:
 import pytest  # noqa: E402
 
 from conftest import make_pet, pet_mac, write_session  # noqa: E402
-from core import view_model  # noqa: E402
+from core import aggregate, view_model  # noqa: E402
 
 mac_only = pytest.mark.skipif(pet_mac is None, reason='M3 #23：Windows 未接聚合器')
 
@@ -134,3 +134,90 @@ class TestPollMultiSession:
             pet.poll()
             time.sleep(0.01)
         assert pet.state == 'attention'  # bg 连击 3 次只记账，不把主会话石化
+
+
+class TestSessionMenu:
+    """#22：菜单会话区数据（纯函数）——平台层只画 NSMenu/tkinter，不拼文案不排序。"""
+
+    def _state(self, state, ts, session='s', project='p', attention=None):
+        data = {'state': state, 'session': session, 'ts': ts, 'project': project}
+        if attention is not None:
+            data['attention'] = attention
+        return view_model.normalize(data)
+
+    def test_minutes_ago_buckets(self):
+        now = 100000.0
+        assert view_model.minutes_ago(now - 30, now) == '刚刚'
+        assert view_model.minutes_ago(now - 5 * 60, now) == '5 分钟前'
+        assert view_model.minutes_ago(now - 90 * 60, now) == '1 小时 30 分前'
+        assert view_model.minutes_ago(now - 2 * 3600, now) == '2 小时前'
+
+    def test_label_uses_project_state_and_age(self):
+        now = 100000.0
+        s = self._state('tool', now - 5 * 60, project='pet')
+        assert view_model.session_label(s, now) == 'pet · 在跑工具 · 5 分钟前'
+
+    def test_label_privacy_falls_back_to_short_id(self):
+        now = 100000.0
+        s = self._state('waiting', now - 60, session='abc12345', project='')
+        assert view_model.session_label(s, now) == '会话 2345 · 等你 · 1 分钟前'
+
+    def test_entries_sorted_by_priority_with_checkmark(self):
+        now = 100000.0
+        states = [
+            self._state('tool', now - 10, 'work', 'pet'),
+            self._state('error', now - 20, 'boom', 'api'),
+            self._state('attention', now - 30, 'hot', 'web'),
+        ]
+        entries = aggregate.session_entries(states, main_session='boom', now=now)
+        assert [e[1] for e in entries] == ['hot', 'boom', 'work']  # 按优先级倒序
+        assert [e[2] for e in entries] == [False, True, False]     # 主会话打勾
+
+    def test_entries_empty(self):
+        assert aggregate.session_entries([], '', now=0.0) == []
+
+
+@mac_only
+class TestPickSession:
+    """#22：菜单点击 → pin + 通用聚焦。"""
+
+    class _Item:
+        def __init__(self, sid):
+            self._sid = sid
+
+        def representedObject(self):
+            return self._sid
+
+    def test_pick_pins_and_polls_immediately(self, pet_state, monkeypatch):
+        petmod, _tmp, sessions = pet_state
+        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: True)
+        write_session(sessions, 'hot', {'state': 'attention', 'text': '需要你看一下',
+                                        'project': 'a', 'session': 'hot'}, age=3)
+        write_session(sessions, 'work', {'state': 'tool', 'text': '在改 x.ts',
+                                         'project': 'b', 'session': 'work'}, age=2)
+        pet = make_pet()
+        pet.poll()
+        assert pet.state == 'attention'
+        pet.pickSession_(self._Item('work'))
+        assert pet.pinned == 'work'
+        assert pet.state == 'tool' and pet.project == 'b'  # poll 已立即生效
+
+    def test_pick_unknown_session_ignored(self, pet_state, monkeypatch):
+        petmod, _tmp, sessions = pet_state
+        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: True)
+        write_session(sessions, 'work', {'state': 'tool', 'text': '在改 x.ts',
+                                         'project': 'b', 'session': 'work'}, age=2)
+        pet = make_pet()
+        pet.poll()
+        pet.pickSession_(self._Item('ghost'))
+        assert pet.pinned == ''
+
+    def test_pick_focus_failure_shows_project_path(self, pet_state, monkeypatch):
+        petmod, _tmp, sessions = pet_state
+        monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: False)
+        write_session(sessions, 'work', {'state': 'tool', 'text': '在改 x.ts',
+                                         'project': 'b', 'session': 'work'}, age=2)
+        pet = make_pet()
+        pet.poll()
+        pet.pickSession_(self._Item('work'))
+        assert '没找到终端窗口' in pet.text and 'b' in pet.text

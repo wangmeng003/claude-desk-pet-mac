@@ -67,3 +67,13 @@ def pick(states: list[models.SessionState], pinned: str = '') -> AggregateResult
         main = max(states, key=sort_key)
     waiting = sum(1 for s in states if s.attention)
     return AggregateResult(main, len(states), waiting)
+
+
+def session_entries(states: list[models.SessionState], main_session: str,
+                    now: float) -> list[tuple[str, str, bool]]:
+    """菜单会话区的数据（M3 #22）：(文案, session id, 是否主会话)，按 sort_key 倒序。
+
+    平台层（mac NSMenu / Windows tkinter）只画这个列表，不排序不拼文案。
+    """
+    return [(view_model.session_label(s, now), s.session, s.session == main_session)
+            for s in sorted(states, key=sort_key, reverse=True)]

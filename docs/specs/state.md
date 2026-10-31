@@ -323,10 +323,10 @@ def pick_main(sessions):
 - [ ] 正常/旧格式/缺字段/坏 JSON/未知状态。
 - [ ] TTL：thinking 30m、waiting 24h、celebrate 5m、SessionEnd 5m。
 - [ ] 未来时间戳 > 5m 跳过。
-- [ ] 多会话优先级：attention > error > waiting > celebrate > tool > thinking > idle。
+- [x] 多会话优先级：attention > error > waiting > celebrate > tool > thinking > idle。
 - [ ] `SessionStart` attention=false；`Stop` waiting=true、celebrate=false。
-- [ ] 同优先级按 `ts`，再按 `session` 确定性。
-- [ ] 气泡计数：3 会话 2 个 attention → “3 个会话 · 2 个等你”。
+- [x] 同优先级按 `ts`，再按 `session` 确定性。
+- [x] 气泡计数：3 会话 2 个 attention → “3 个会话 · 2 个等你”。
 - [ ] 隐私模式不输出项目名/文件名。
 - [ ] 文件权限 `0600`、目录 `0700`。
 - [ ] 原子写：并发写不产生半截 JSON。

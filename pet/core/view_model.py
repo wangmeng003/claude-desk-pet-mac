@@ -16,7 +16,8 @@ def normalize(data: dict) -> models.SessionState:
 
     - 'aborted' 是旧格式，映射到 error（文案保留）；
     - 未知/缺失/非字符串 state 回退 idle（协议：坏数据按「没有活跃工作」处理）；
-    - v1 新增字段里 session 保留（通知去重键用，#11），v/agent/attention 读取方忽略。
+    - v1 新增字段里 session/ts/attention 保留（#11 去重键、M3 #20 聚合排序/计数），
+      v/agent 读取方忽略。
     """
     state = data.get('state')
     if state == 'aborted':
@@ -26,12 +27,20 @@ def normalize(data: dict) -> models.SessionState:
     sound = data.get('sound')
     if sound not in models.SOUNDS:
         sound = None
+    ts = data.get('ts')
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)):
+        ts = 0.0
+    attention = data.get('attention')
+    if not isinstance(attention, bool):
+        attention = state in models.DEFAULT_ATTENTION
     return models.SessionState(
         state=state,
         text=_text(data.get('text', '')),
         project=_text(data.get('project', '')),
         sound=sound,
         session=_text(data.get('session', '')),
+        ts=float(ts),
+        attention=attention,
     )
 
 

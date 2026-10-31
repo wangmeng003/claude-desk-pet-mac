@@ -25,6 +25,22 @@ IDLE_TEXT = '在发呆～ zZ'
 
 SOUNDS = ('done', 'error')  # 状态文件里合法的声音字段值
 
+# 状态优先级（specs/state.md §3，数值越大越优先）：多会话聚合选主用（M3 #20）。
+PRIORITY = {
+    'attention': 90,
+    'error': 80,
+    'waiting': 70,
+    'celebrate': 50,
+    'tool': 40,
+    'reading': 40,
+    'thinking': 30,
+    'idle': 0,
+}
+
+# attention 字段缺省时的状态推导（specs/state.md §3「默认 attention」列）：
+# waiting/attention/error 需要用户处理；写入方显式设置的字段覆盖这里的默认。
+DEFAULT_ATTENTION = frozenset({'waiting', 'attention', 'error'})
+
 # 状态 TTL（specs/state.md §1.2）：now - ts 超过 TTL 视为该会话不再活跃。
 # 生命周期（#4）用它判断桌宠何时退出；聚合展示（M3）用它过滤过期会话。
 STATE_TTL = {
@@ -48,6 +64,8 @@ class SessionState:
     project: str
     sound: str | None  # None = 不播；否则是 SOUNDS 里的值
     session: str = ''  # 会话 id（协议 v1）：原生通知的去重键用（#11）
+    ts: float = 0.0  # 事件时间（协议 v1）：TTL 判定与聚合排序用（M3 #20）；坏数据回退 0
+    attention: bool = False  # 是否需要用户处理（缺省按状态推导，显式字段覆盖）
 
 
 @dataclass(frozen=True)

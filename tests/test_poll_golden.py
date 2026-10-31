@@ -205,7 +205,7 @@ class TestNotifyGating:
             monkeypatch.setattr(petmod.focus, 'bring_claude_front', lambda: False)
             go = petmod.Pet.goHandle_
         else:
-            monkeypatch.setattr(petmod, 'focus_claude', lambda: False)
+            monkeypatch.setattr(petmod.Pet, 'focus_claude', lambda self: False)
             go = petmod.Pet.go_handle
         pet = make_pet()
         pet.project = 'demo'

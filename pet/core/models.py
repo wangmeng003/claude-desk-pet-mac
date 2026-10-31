@@ -48,3 +48,19 @@ class SessionState:
     project: str
     sound: str | None  # None = 不播；否则是 SOUNDS 里的值
     session: str = ''  # 会话 id（协议 v1）：原生通知的去重键用（#11）
+
+
+@dataclass(frozen=True)
+class PermissionRequestViewModel:
+    """权限审批卡片的数据（#13）。renderer 只收这个，不 import bridge、不做网络。
+
+    detail 只进内存和卡片：状态文件、日志、通知都不写它（specs/permission.md §5.3）。
+    """
+    id: str
+    session: str
+    tool: str
+    project: str
+    summary: str
+    detail: str
+    risk: str  # low/medium/high；bridge 取 max(客户端上报, 本地规则计算)
+    ts: float

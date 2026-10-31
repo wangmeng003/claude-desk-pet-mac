@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- M2 #13：权限审批桥（specs/permission.md §5.2-5.4）：
+  - `pet/bridge/permission.py` 状态机 idle → pending → allowed/denied/ask：
+    同一时刻一个请求（忙时 409 不排队）、重复 id 409、超时 600s 转 ask、
+    `fail_all` 宠物退出时把 pending 立即转 ask；线程安全（HTTP 线程 wait / UI 线程 decide）
+  - `pet/bridge/server.py`：只绑 127.0.0.1 随机端口、per-run token（`Authorization: Bearer` +
+    `hmac.compare_digest`）、非空 `Origin` 一律 403（CSRF）、body ≤ 64KB、字段校验（超长/缺字段 400）；
+    `bridge.json` 0600（port/token/pid/started_at）启动写退出删；任何内部异常 → 500 + ask（fail-open）
+  - `PermissionRequestViewModel` 落在 `core/models.py`：renderer 只收 VM，不 import bridge 不做网络
+  - risk 由 bridge 取 `max(客户端上报, 本地规则计算)`（客户端报 low 但命令含 rm -rf 时兜成 high）
+  - 24 项契约测试：鉴权/校验/忙时/重复 id/超时/退出清理/回调异常 fail-open/会话不串
+- M2 #14：风险规则纯函数（specs §5.6）：`pet/bridge/risk.py` `assess(tool, summary, detail) →
+  high/medium/low`，不用 LLM；high=`rm -rf`/`sudo`/`curl|sh`/`chmod 777`/凭据面/force push，
+  medium=`git reset --hard`/全局安装/网络下载/项目外写，默认 low；规则表可整体替换，
+  Unicode/长命令/空输入不崩；「可关闭」开关在卡片层（#15）
 - M2 #11：attention 事件升级（权限请求/通知事件 → 气泡 + 原生通知 + 声音）：
   - 通知策略从 `wants_notify` 换成 `NotifyGate`（纯函数对象，测试锁定）：
     celebrate/error/attention 三类状态切换时弹一次；**同一件事（session+状态+文案）

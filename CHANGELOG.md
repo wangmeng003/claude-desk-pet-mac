@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.0
+
+- 发版卫生（本版一并修）：
+  - 版本号三方对齐：`plugin.json` 早已写 0.2.0，`pyproject.toml` 还停在 0.1.3 —— 现统一为 **0.2.0**；
+    CHANGELOG 的 `Unreleased` 落成 `## 0.2.0` 段，并打 `v0.2.0` tag（此前仓库无任何 tag）
+  - `docs/ARCHITECTURE.md` / `docs/ROADMAP.md` 的「适用版本」同步到 v0.2.0 起（架构文档描述的
+    SessionAggregator / BridgeServer / PermissionController 都是本版才落地的模块）
+  - **CI 依赖钉版本**：新增 `requirements-dev.txt`（pytest/ruff/mypy/pillow/pyobjc 全钉死），
+    CI 从 `pip install pytest ruff mypy pillow` 改为 `pip install -r requirements-dev.txt`。
+    原写法每次构建都取 PyPI 最新版，mypy 2.x / pytest 9.x 上游任意发版都可能直接打红 CI，
+    而本地 `.venv` 是旧版复现不出来；pyobjc 用环境标记只在 macOS 装
 - M3 #20–#23 多会话（specs/state.md §5，双平台）：
   - 聚合器纯函数 `core/aggregate.py`：`collect`（TTL 过滤/未来 ts 跳过/坏 JSON 跳过/
     session 缺失用文件名补/顺手清两天前旧文件）+ `pick`（排序键 `(attention, priority,

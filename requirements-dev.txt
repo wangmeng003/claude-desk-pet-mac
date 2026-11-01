@@ -1,0 +1,18 @@
+# 开发/测试依赖 —— 全部钉死版本。
+#
+# 为什么钉死：CI 原来写的是 `pip install pytest ruff mypy pillow`，等于每次构建
+# 都取 PyPI 最新版。mypy 已到 2.x、pytest 到 9.x，上游任何一次发版都可能直接
+# 打红 CI，而本地的 .venv 是旧版本、复现不出来。
+#
+# 升级方式（改这里 + 跑一遍本地 pytest/ruff/mypy + 改 CHANGELOG）：
+#   pip index versions <pkg>        # 看有哪些版本
+#   pip install -U <pkg>==<新版本>    # 本地先试
+#   python -m pytest && ruff check pet/ tests/ && (cd pet && mypy pet_mac.py launch.py setup.py core/ platforms/)
+#
+# 版本来源：2026-11-01 巡检时的 PyPI 最新版
+pytest==9.2.0
+ruff==0.17.3
+mypy==2.4.1
+pillow==13.0.0
+# pyobjc 只在 macOS 需要（Windows 上装不上也不需要）
+pyobjc-framework-Cocoa==13.0.0 ; sys_platform == "darwin"

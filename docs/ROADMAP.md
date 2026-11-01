@@ -1,7 +1,7 @@
 # Claude Desk Pet 路线图
 
-> 状态：lean v2.0 · 最后更新：2026-10-30  
-> 适用版本：v0.1.3 起  
+> 状态：lean v2.0 · 最后更新：2026-11-01  
+> 适用版本：v0.2.0 起  
 > 关联文档：[架构约定](ARCHITECTURE.md) · [状态协议](specs/state.md) · [权限](specs/permission.md) · [主题](specs/theme.md) · [竞品调研](research/competitive-landscape.md)
 
 **怎么用这份文档**

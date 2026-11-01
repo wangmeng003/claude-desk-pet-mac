@@ -7,7 +7,7 @@
 # 升级方式（改这里 + 跑一遍本地 pytest/ruff/mypy + 改 CHANGELOG）：
 #   pip index versions <pkg>        # 看有哪些版本
 #   pip install -U <pkg>==<新版本>    # 本地先试
-#   python -m pytest && ruff check pet/ tests/ && (cd pet && mypy pet_mac.py launch.py setup.py core/ platforms/)
+#   python -m pytest && ruff check pet/ tests/ && (cd pet && mypy pet_mac.py launch.py setup.py theme_cli.py core/ platforms/ theme/)
 #
 # 版本来源：2026-11-01 巡检时的 PyPI 最新版
 pytest==9.2.0

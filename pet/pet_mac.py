@@ -23,6 +23,7 @@ from core import state_reader as core_state_reader
 from core import tracker as core_tracker
 from core import view_model as core_view_model
 from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (测试从入口锁定契约)
+from theme import loader as theme_loader  # 主题皮肤/提示音（M4）；core 不认识主题
 from platforms.mac import focus
 from platforms.mac import card as mac_card
 from platforms.mac import window as mac_window
@@ -138,6 +139,30 @@ class Pet:
     def claude_is_foreground(self):
         return self.focus_watch.claude_is_foreground()
 
+    def sync_settings(self):
+        """外部改了 settings.json（/pet theme use 等）→ 立即生效（spec §4.1）。
+
+        按 mtime 探测，只有 theme 字段变了才重载立绘；这个函数绝不能拖垮主
+        轮询——文件不存在/读不动都安静跳过。测试造的 Pet 没有 _settings_mtime，
+        getattr 取默认值直接跳过。
+        """
+        try:
+            mt = os.stat(SETTINGS).st_mtime
+        except OSError:
+            return
+        if mt == getattr(self, '_settings_mtime', mt):
+            return
+        self._settings_mtime = mt
+        old_theme = self.settings.get('theme')
+        self.settings = load_settings()
+        if self.settings.get('theme') != old_theme:
+            self.window.resize()  # 内部重载立绘，底边中点不动
+
+    def sound_path(self, name):
+        """提示音路径：主题音优先（M4），没配/坏了回退内置 sounds/。"""
+        pack = getattr(getattr(self, 'window', None), 'pack', None)
+        return theme_loader.sound_path(pack, name, SOUNDS)
+
     # ---------- 菜单动作（NSMenuItem target 是 view，转发回来）----------
     def setSize_(self, sender):
         name = sender.title()
@@ -210,6 +235,7 @@ class Pet:
     def poll(self):
         # 坏状态文件不能冻住画面：出错了这一帧不画，下一帧继续
         try:
+            self.sync_settings()
             self.poll_once()
         except Exception:
             core_errors.log_exception(RUN_DIR)
@@ -239,7 +265,7 @@ class Pet:
         self.total, self.waiting = result.total, result.waiting
         self.main_session = fx.main_session
         if fx.sound and self.settings.get('sound', True) and not self.settings.get('dnd'):
-            play_sound(os.path.join(SOUNDS, fx.sound + '.wav'))
+            play_sound(self.sound_path(fx.sound))
         # 原生通知（#6/#11）：按会话迁移触发——后台会话的 error/attention
         # 不被主会话淹没；勿扰/开关/2 秒去重仍由 NotifyGate 把关
         for ev in fx.notifies:

@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then target=pet_mac.py; else target=pet.pyw; fi
-          cd pet && mypy "$target" launch.py setup.py core/ platforms/
+          cd pet && mypy "$target" launch.py setup.py theme_cli.py core/ platforms/ theme/
       - name: pytest（= 平台冒烟：导入被测模块即覆盖平台依赖）
         run: python -m pytest -v
 

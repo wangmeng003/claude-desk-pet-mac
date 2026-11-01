@@ -26,6 +26,7 @@ from core import state_reader as core_state_reader
 from core import tracker as core_tracker
 from core import view_model as core_view_model
 from core.models import IDLE_AFTER, SIZES, SPRITES  # noqa: F401  (build/菜单与测试直接用)
+from theme import loader as theme_loader  # 主题皮肤/提示音（M4）；core 不认识主题
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUNDS = os.path.join(os.path.dirname(HERE), 'sounds')
@@ -174,9 +175,8 @@ def save_settings(s):
     core_state_reader.save_settings(SETTINGS, s)
 
 
-def prepare(path, height):
-    """缩放立绘并把透明部分处理成透明色。"""
-    im = Image.open(path).convert('RGBA')
+def prepare_image(im, height):
+    """缩放立绘（RGBA PIL Image）并把透明部分处理成透明色。"""
     w = round(im.width * height / im.height)
     im = im.resize((w, height), Image.LANCZOS)
     bg = Image.new('RGBA', im.size, EDGE + (255,))
@@ -185,6 +185,11 @@ def prepare(path, height):
     mask = im.getchannel('A').point(lambda a: 255 if a >= 110 else 0)
     key.paste(solid, (0, 0), mask)
     return key.convert('RGB')
+
+
+def prepare(path, height):
+    """按路径准备立绘：打开 → prepare_image。"""
+    return prepare_image(Image.open(path).convert('RGBA'), height)
 
 
 class PermissionCard:
@@ -349,11 +354,24 @@ class Pet:
     # ---------- 布局 ----------
     def build(self):
         h = round(SIZES.get(self.settings.get('size', '中'), 190) * self.scale)
+        # 主题（M4，specs/theme.md）：settings['theme'] 指向的主题包优先，
+        # 坏了/缺状态按 §3.2/§5.3 回退内置——load_active 从不抛异常
+        self.pack = theme_loader.load_active(
+            os.path.join(RUN_DIR, 'themes'), str(self.settings.get('theme') or ''))
         self.images = {}
         for state, name in SPRITES.items():
             try:
-                self.images[state] = ImageTk.PhotoImage(
-                    prepare(os.path.join(HERE, 'sprites', name + '.png'), h))
+                ref = self.pack.image_for(state) if self.pack is not None else None
+                if ref is not None:
+                    path, rect = ref
+                    with Image.open(path) as im:
+                        base = im.convert('RGBA')
+                        if rect is not None:  # 网格包只裁该状态那一帧
+                            base = base.crop(rect)
+                    self.images[state] = ImageTk.PhotoImage(prepare_image(base, h))
+                else:
+                    self.images[state] = ImageTk.PhotoImage(
+                        prepare(os.path.join(HERE, 'sprites', name + '.png'), h))
             except Exception:
                 continue  # 立绘缺失/损坏：跳过这一张，别让整个桌宠起不来
         self.fallback_image = next(iter(self.images.values()), None)
@@ -570,12 +588,31 @@ class Pet:
         # poll 里的异常绝不能停掉轮询：root.after 在最后，
         # 一旦抛错就再也不会调度，桌宠会永远停在旧表情。
         try:
+            self.sync_settings()
             self.poll_once()
         except Exception:
             self.log_error()
         finally:
             self.drain_card_events()
             self.schedule(250, self.poll)
+
+    def sync_settings(self):
+        """外部改了 settings.json（/pet theme use 等）→ 立即生效（spec §4.1）。
+
+        按 mtime 探测，只有 theme 字段变了才重载立绘；文件不存在/读不动都
+        安静跳过。测试造的 Pet 没有 _settings_mtime，getattr 默认值直接跳过。
+        """
+        try:
+            mt = os.stat(SETTINGS).st_mtime
+        except OSError:
+            return
+        if mt == getattr(self, '_settings_mtime', mt):
+            return
+        self._settings_mtime = mt
+        old_theme = self.settings.get('theme')
+        self.settings = load_settings()
+        if self.settings.get('theme') != old_theme:
+            self.resize()  # 内部 build() 重载立绘并保持底边中点
 
     # ---------- 权限审批卡片（#15）----------
     def attach_bridge(self, server) -> None:
@@ -637,8 +674,11 @@ class Pet:
                 self.session_var.set(fx.main_session)  # 菜单单选跟随主会话
         if fx.sound and self.sound_var.get() and not self.settings.get('dnd'):
             try:
-                winsound.PlaySound(os.path.join(SOUNDS, fx.sound + '.wav'),
-                                   winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+                # 主题音优先（M4）；winsound 只吃 WAV，主题是 mp3 时回退内置
+                winsound.PlaySound(
+                    theme_loader.sound_path(getattr(self, 'pack', None), fx.sound,
+                                            SOUNDS, wav_only=True),
+                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
             except Exception:
                 pass
         # 原生通知（#6/#11）：按会话迁移触发——后台会话的 error/attention

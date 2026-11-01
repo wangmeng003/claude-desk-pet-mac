@@ -65,7 +65,9 @@ class PetView(NSView):
         if img is not None:
             iw = ctl.char_h * ctl.aspects.get(st, 0.73)
             rect = NSMakeRect((W - iw) / 2, 4 - (bob + hop) * s, iw, ctl.char_h)
-            img.drawInRect_fromRect_operation_fraction_(rect, NSMakeRect(0, 0, 0, 0),
+            # 主题网格包只画该状态那一帧（单图布局 src_rects 是整图）
+            src = getattr(ctl, 'src_rects', {}).get(st) or NSMakeRect(0, 0, 0, 0)
+            img.drawInRect_fromRect_operation_fraction_(rect, src,
                                                         NSCompositingOperationSourceOver, 1.0)
 
         # 气泡：圆角矩形 + 下面的尾巴
@@ -180,24 +182,49 @@ class PetWindow:
 
     # ---------- 立绘与窗口 ----------
     def load_sprites(self):
-        from PIL import Image
+        from theme import loader as theme_loader
         h = SIZES.get(self.pet.settings.get('size', '中'), 190)
         self.char_h = h
-        self.images, self.aspects = {}, {}
+        self.images, self.aspects, self.src_rects = {}, {}, {}
+        # 主题（M4，specs/theme.md）：settings['theme'] 指向的主题包优先，
+        # 坏了/缺状态按 §3.2/§5.3 回退内置——pack 留在 self 上给提示音解析用
+        theme_id = str(self.pet.settings.get('theme') or '')
+        self.pack = theme_loader.load_active(
+            os.path.join(self.run_dir, 'themes'), theme_id)
         for state, name in SPRITES.items():
+            ref = self.pack.image_for(state) if self.pack is not None else None
+            if ref is not None:
+                path, rect = ref
+                img = NSImage.alloc().initWithContentsOfFile_(path)
+                if img is None:
+                    continue  # 主题图读不出：这张回退内置
+                if rect is not None:
+                    self.src_rects[state] = NSMakeRect(*rect)
+                    self.aspects[state] = rect[2] / rect[3]
+                else:
+                    self.src_rects[state] = NSMakeRect(0, 0, 0, 0)
+                    self.aspects[state] = self._aspect(path)
+                self.images[state] = img
+                continue
             path = os.path.join(self.sprites_dir, name + '.png')
             img = NSImage.alloc().initWithContentsOfFile_(path)
             if img is None:
                 continue
-            try:
-                with Image.open(path) as im:
-                    aspect = im.width / im.height  # 每张保持自己的宽高比
-            except Exception:
-                aspect = 0.73  # PNG 坏了也要能画出来
             self.images[state] = img
-            self.aspects[state] = aspect
+            self.aspects[state] = self._aspect(path)
+            self.src_rects[state] = NSMakeRect(0, 0, 0, 0)
         # 某张立绘缺失/损坏时用它替身；全都没有就只是不画立绘，别让桌宠起不来
         self.fallback_image = next(iter(self.images.values()), None)
+
+    @staticmethod
+    def _aspect(path: str) -> float:
+        """每张保持自己的宽高比；读不出就按默认胖瘦画。"""
+        from PIL import Image
+        try:
+            with Image.open(path) as im:
+                return im.width / im.height
+        except Exception:
+            return 0.73  # PNG 坏了也要能画出来
 
     def make_window(self):
         self.W = max(round(self.char_h * max(self.aspects.values(), default=0.73)), round(190))

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- M4 #24 主题系统第一刀（specs/theme.md，本地导入 + 换装闭环）：
+  - `pet/theme/loader.py`：包校验/加载纯函数（只依赖 stdlib）。`pet.json` ≤64KB、
+    id/名称/许可证字段校验（`unknown` 警告可导入）、网格帧索引越界拒绝、
+    帧尺寸 32–1024、路径穿越/绝对路径/符号链接逐级拒绝、PNG/WebP/WAV/MP3
+    魔数校验、单图 ≤4096²、音频 ≤2MB、全包 ≤20MB/≤200 文件、后缀白名单
+    （只允许数据文件，.py/.sh/.html 一律拒绝）；缺状态按 §3.2 回退
+    （attention/celebrate→waiting→idle），只画 idle 的极简包也能覆盖 8 状态；
+    Petdex 行名（running/review/jumping/waving/failed…）自动映射
+  - `pet/theme/manager.py` + `pet/theme_cli.py`：install（目录/zip，防 zip bomb
+    与路径穿越条目，暂存目录校验后落位，`--force` 覆盖）/ use（写 settings.json
+    并持久化）/ remove（使用中的先切走）/ list / info；`use builtin` 切回内置
+  - `/pet theme <子命令>`（hooks/commands.ts → theme_cli.py，doctor 同款
+    「shell 出去跑、stdout 回显」模式，系统 python 即可，不依赖插件 venv）
+  - 双平台渲染接入：主题皮肤优先、坏包/缺图逐张回退内置（mac 网格包按帧矩形
+    绘制，Windows 按 PIL crop）；提示音主题音优先（Windows winsound 只吃 WAV，
+    mp3 主题音回退内置）；`use` 后开着的桌宠按 settings.json mtime 探测、
+    几秒内自动换装（spec §4.1 立即重载）
+  - 测试：`tests/test_theme.py` 36 项（校验矩阵/回退链/安装切换删除/持久化/
+    zip 安全/sync 重载），PNG/WAV fixture 全部测试内程序生成，不落仓库二进制；
+    macOS 实机 e2e：换装 → 删 pet.json 回退内置 → 修复恢复，截图色签验证
+
 ## 0.2.1
 
 - 修复 Claude Code 2.1.316 起整个 mod 被静默拒载：经典事件对 hooks module 的暴露名

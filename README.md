@@ -43,15 +43,14 @@
 注意：同一事件配置多个 hook 时**第一个返回决策的获胜**——如果你已有会返回 allow/deny 的
 权限 hook，桌宠卡片可能永远等不到请求；桌宠客户端无桥可连时输出空 `{}`，不占别人的决策位。
 
-注意：同一事件配置多个 hook 时**第一个返回决策的获胜**——如果你已有会返回 allow/deny 的
-权限 hook，桌宠卡片可能永远等不到请求；桌宠客户端无桥可连时输出空 `{}`，不占别人的决策位。
-
 **命令**
 
 - `/token-stats`：查看本会话和本项目累计的 token 用量、缓存命中率、额度
 - `/pet`：不小心关掉了桌宠？用它重新召唤
 - `/pet setup`：macOS 上重新准备运行环境（首次安装失败时用）
 - `/pet doctor`：自诊断（版本/依赖/状态目录/单实例/日志），输出可直接粘贴到 issue
+- `/pet theme list|install <路径|zip>|use <id|builtin>|remove <id>|info <id>`：换装
+  （本地主题包，兼容 Petdex/Codex 网格与单图布局；详见 `docs/specs/theme.md`）
 
 ## 运行要求
 

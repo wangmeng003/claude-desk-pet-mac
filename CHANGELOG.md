@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.1
+
+- 修复 Claude Code 2.1.316 起整个 mod 被静默拒载：经典事件对 hooks module 的暴露名
+  改为 `classic.<Event>` 前缀形式，`register.ts` 的 `on('notification')` 相应改为
+  `on('classic.Notification')`（其余事件名未变，`claude plugin validate` 复核）。
+  此前模块在会话启动时被引擎整体拒绝，桌宠不启动、状态栏/命令全部失效，
+  且失败只进 debug log（`claude --debug`），正常会话完全无感——表象是"插件装了没反应"
+
 ## 0.2.0
 
 - 发版卫生（本版一并修）：

@@ -56,7 +56,7 @@ declare module 'claude-code' {
   export interface OnFunction {
     (
       event: 'session.start' | 'session.end' | 'turn.start' | 'tool.call' | 'turn.complete'
-        | 'notification',
+        | 'classic.Notification',
       handler: Handler,
     ): HookRegistration
     (event: 'command.run', filter: { command: string }, handler: Handler): void

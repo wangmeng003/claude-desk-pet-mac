@@ -2,7 +2,7 @@
 // 事件 → 状态映射按状态协议 v1 §4.1（specs/state.md）：
 // SessionStart→waiting(false)、UserPromptSubmit/turn.start→thinking、
 // PreToolUse/tool.call→tool|reading、PostToolUseFailure→error(true)、
-// Stop/turn.complete→waiting(true)|celebrate(false)、Notification→attention(true)、
+// Stop/turn.complete→waiting(true)|celebrate(false)、classic.Notification→attention(true)、
 // SessionEnd→idle(false)。
 import type { Register } from 'claude-code'
 import { initContext, type SessionContext } from './context.ts'
@@ -43,7 +43,7 @@ export const register: Register = on => {
     return ended
   })
 
-  on('notification', async ($, e, next) => {
+  on('classic.Notification', async ($, e, next) => {
     const done = await next(e)
     if (ctx) await pet(ctx, $, 'attention', '需要你看一下', { attention: true })  // 权限提醒等非阻塞通知也走这里
     return done

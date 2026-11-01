@@ -56,8 +56,6 @@
 ## 运行要求
 
 **Windows**
-
-- **Windows**（悬浮窗和提示音用的是 Windows 的接口）
 - **Python 3**，并且在命令行里输入 `python` 能直接运行
 - **Pillow** 图像库，用下面这条命令安装：
 
@@ -131,22 +129,4 @@ claude plugin install desk-pet --marketplace wangmeng003/claude-desk-pet-mac
 - 这是个人粉丝作品，与 Anthropic 官方无关
 - 立绘由作者用 AI 绘图生成，最初是为自己的视频做的素材
 - 代码使用 MIT 许可证，详见 [LICENSE](LICENSE)
-
-### 关于这个 fork
-
-本仓库 fork 自 [BingXing-ai/claude-desk-pet](https://github.com/BingXing-ai/claude-desk-pet)（原作者的 Windows 版），
-由 **wangmeng003** 维护，补充了：
-
-- **macOS 支持**：新增 `pet/pet_mac.py`（原生 `NSWindow` 悬浮窗 + pyobjc），`pet/launch.py` 与 `hooks/register.ts` 按平台分派启动
-- **首次运行自动准备环境**：macOS 下自动创建 venv 并安装 Pillow/pyobjc，失败时可用 `/pet setup` 重试
-- **立绘变形修复**：每张立绘保持自己的宽高比
-- **兼容性修复**：去掉 `plugin.json` 的 `types` 字段，避免旧版 Claude Code 同步市场时跳过整个插件
-
-上游更新可以随时同步：
-
-```bash
-git remote add upstream git@github.com:BingXing-ai/claude-desk-pet.git
-git fetch upstream && git merge upstream/main
-```
-
-原作者的版权声明保留在 [LICENSE](LICENSE) 中。
+- macOS 版（`pet/pet_mac.py`、多会话、权限审批等）由 [wangmeng003](https://github.com/wangmeng003) 开发并合入本仓库

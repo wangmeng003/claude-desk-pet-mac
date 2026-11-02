@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 代码审查修复（6 项）：
+  - `hooks/register.ts`：去掉 `tool.call` 的 `.catch(($, e, next) => next(e))` 兜底——
+    若 `next(e)` 本身失败，兜底会再跑一次 `next(e)`，等于把工具（比如 Bash 命令）
+    执行两遍；桌宠逻辑各自 try/catch，`next` 的错原样上抛
+  - `hooks/state.ts`：新增 `toolInput(e)`——工具入参优先取嵌套的 `e.input`，
+    兼容参数平铺在事件顶层的旧形态；修复此前把整个事件对象当入参传给
+    `describe`，导致气泡永远只显示「在改文件…」而看不到具体文件名
+  - `hooks/accounting.ts`/`statusline.ts`：项目累计 key 归一化——Windows
+    盘符路径大小写/分隔符不敏感（`C:\Repo` 与 `c:/repo` 不再裂成两份累计），
+    mac/Linux 路径保持大小写敏感；升级时老 key 一次性迁移，不丢已有累计
+  - `pet/launch.py`：启动失败（两种 creationflags 都失败 / macOS Popen 失败）
+    改为 exit 1，hooks 侧按退出码如实报「桌宠没起来」，不再误报已召唤
+  - `pet/pet.pyw`：`find_claude_window` 跳过带 owner 的附属小窗、选标题最长的
+    主窗口（EnumWindows 顺序不保证主窗口在前，取第一个可能唤起加载框）；
+    `__main__` 顶层异常改走 `core_errors.log_exception` 安全路径（目录不存在
+    先建，写不进日志也不吞原始堆栈）
+  - 删除无引用的孤儿立绘 `pet/sprites/confident.png`（SPRITES 映射未用到）
 - M4 #24 主题系统第一刀（specs/theme.md，本地导入 + 换装闭环）：
   - `pet/theme/loader.py`：包校验/加载纯函数（只依赖 stdlib）。`pet.json` ≤64KB、
     id/名称/许可证字段校验（`unknown` 警告可导入）、网格帧索引越界拒绝、

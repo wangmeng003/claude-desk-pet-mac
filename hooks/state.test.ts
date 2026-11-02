@@ -1,7 +1,7 @@
 // state 纯映射的锁定测试（从 register.ts 原样搬出，行为不变）。
 import { test } from 'node:test'
-import { strictEqual } from 'node:assert'
-import { baseName, clip, describe, READING } from './state.ts'
+import { strictEqual, deepStrictEqual } from 'node:assert'
+import { baseName, clip, describe, READING, toolInput } from './state.ts'
 
 test('baseName 取路径最后一段（正斜杠/反斜杠/尾斜杠）', () => {
   strictEqual(baseName('/a/b/c.ts'), 'c.ts')
@@ -54,4 +54,21 @@ test('隐私底线（#8）：文案只含文件名，绝不写完整路径/命�
   // 命令内容、prompt 一概不进文案
   strictEqual(describe('Bash', { command: 'rm -rf ~/.ssh' }), '在跑命令…')
   strictEqual(describe('TodoWrite', { prompt: '帮我看看 ~/.env 里的 KEY' }), '在用 TodoWrite')
+})
+
+test('toolInput：优先取嵌套的 e.input（引擎按 input 传工具参数）', () => {
+  deepStrictEqual(toolInput({ tool: 'Edit', input: { file_path: '/x/a.ts' } }), { file_path: '/x/a.ts' })
+})
+
+test('toolInput：兼容参数平铺在事件顶层的旧形态', () => {
+  deepStrictEqual(toolInput({ tool: 'Edit', file_path: '/x/a.ts' }), { tool: 'Edit', file_path: '/x/a.ts' })
+})
+
+test('toolInput：取不到入参时返回空对象，异常输入也不抛', () => {
+  deepStrictEqual(toolInput({ tool: 'Bash' }), {})
+  deepStrictEqual(toolInput(null), {})
+  deepStrictEqual(toolInput('Edit'), {})
+  // input 是数组/原始值：不是工具入参，走兜底
+  deepStrictEqual(toolInput({ input: ['rm', '-rf'] }), {})
+  deepStrictEqual(toolInput({ input: 'x' }), {})
 })

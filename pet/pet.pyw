@@ -153,18 +153,25 @@ def claude_is_foreground():
 
 
 def find_claude_window():
-    found = []
+    """挑 Claude 主窗口：跳过带 owner 的附属小窗，标题最长的当主窗口。
+
+    EnumWindows 的返回顺序不保证主窗口在前，取第一个可能唤起的是加载框。
+    """
+    best = None  # (标题长度, hwnd)
     PROC = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
 
     def cb(hwnd, _):
+        nonlocal best
         if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0 \
+                and user32.GetWindow(hwnd, 4) == 0 \
                 and process_name(window_pid(hwnd)) == 'claude.exe':
-            found.append(hwnd)
-            return False
+            length = user32.GetWindowTextLengthW(hwnd)
+            if best is None or length > best[0]:
+                best = (length, hwnd)
         return True
 
     user32.EnumWindows(PROC(cb), 0)
-    return found[0] if found else None
+    return best[1] if best else None
 
 
 def load_settings():
@@ -765,9 +772,9 @@ if __name__ == '__main__':
             pet.attach_bridge(server)
         pet.root.mainloop()
     except Exception:
-        import traceback
-        with open(os.path.join(RUN_DIR, 'pet-error.log'), 'w', encoding='utf-8') as f:
-            traceback.print_exc(file=f)
+        # 走 core_errors 的安全路径：目录不存在先建，连日志都写不进也不能
+        # 在顶层异常处理器里再抛一次把原始堆栈弄丢（.pyw 没有控制台可看）
+        core_errors.log_exception(RUN_DIR)
     finally:
         if server is not None:
             server.stop()  # pending 全转 ask + 删 bridge.json

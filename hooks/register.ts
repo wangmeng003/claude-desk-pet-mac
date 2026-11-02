@@ -6,7 +6,7 @@
 // SessionEnd→idle(false)。
 import type { Register } from 'claude-code'
 import { initContext, type SessionContext } from './context.ts'
-import { READING, describe } from './state.ts'
+import { READING, describe, toolInput } from './state.ts'
 import { pet } from './state_writer.ts'
 import { account, ensureSessionRecord } from './accounting.ts'
 import { refreshStatus } from './statusline.ts'
@@ -58,14 +58,14 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
-    // 桌宠这边的错误绝不能拦住工具，也不能在工具已经放行之后再抛：
-    // 一旦在 next(e) 之后抛错，兜底的 catch 会再跑一次 next(e)，
-    // 等于把工具（比如 Bash 命令）执行两遍。
+    // 桌宠这边的错误绝不能拦住工具，也不能在工具已经放行之后再抛。
+    // 注意：这里不能挂 .catch(($, e, next) => next(e)) 之类的兜底——
+    // 若 next(e) 本身失败，兜底会再跑一次 next(e)，等于把工具（比如
+    // Bash 命令）执行两遍；桌宠逻辑各自 try/catch，next 的错原样上抛。
     const isMain = e.agentId === undefined
     if (isMain && ctx) {
       try {
-        const input = e as unknown as Record<string, unknown>
-        await pet(ctx, $, READING.has(e.tool) ? 'reading' : 'tool', describe(e.tool, input),
+        await pet(ctx, $, READING.has(e.tool) ? 'reading' : 'tool', describe(e.tool, toolInput(e)),
           { attention: false })
       } catch (err) {
         $.ui.log(`桌宠状态更新失败：${String(err)}`, { to: 'debug' })
@@ -89,7 +89,7 @@ export const register: Register = on => {
       }
     }
     return ran
-  }).catch(($, e, next) => next(e)) // 桌宠这边出任何错，都照常放行工具调用
+  })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)

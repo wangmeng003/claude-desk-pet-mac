@@ -19,6 +19,18 @@ export const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ??
 export const MAX_TEXT = 60
 export const clip = (s: string) => (s.length > MAX_TEXT ? `${s.slice(0, MAX_TEXT - 1)}…` : s)
 
+// 从 tool.call 事件里取工具入参：优先嵌套的 e.input（引擎按事件.input 传参），
+// 兼容参数平铺在事件顶层的旧形态；都取不到就当空入参（文案走兜底话术）。
+export function toolInput(e: unknown): Record<string, unknown> {
+  if (e === null || typeof e !== 'object') return {}
+  const rec = e as Record<string, unknown>
+  const nested = rec.input
+  if (nested !== null && typeof nested === 'object' && !Array.isArray(nested)) {
+    return nested as Record<string, unknown>
+  }
+  return typeof rec.file_path === 'string' ? rec : {}
+}
+
 // 工具名 → 气泡里的一句话
 export const describe = (tool: string, input: Record<string, unknown>) => {
   const file = typeof input.file_path === 'string' ? baseName(input.file_path) : ''
